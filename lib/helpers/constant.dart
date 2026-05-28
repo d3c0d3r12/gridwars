@@ -47,7 +47,7 @@ final String backMusic = "music.mp3";
 const String appName = "XO Battle";
 
 final guestProfilePic =
-    "https://firebasestorage.googleapis.com/v0/b/tictact-a37a5.appspot.com/o/icons8-user-male-100.png?alt=media&token=15d0f5ad-aee6-4613-a8d1-e4417283c9ba";
+    "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
 
 final List multiplayerEntryAmount = [25, 50, 100, 200];
 final List<String> typeOfLevel = ["Easy", "Medium", "Hard"];

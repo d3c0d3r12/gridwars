@@ -21,18 +21,16 @@ class _MoreGamesListingState extends State<MoreGamesListing> {
 
   List<HTMLGames> gamesList = [
     HTMLGames(
-        gameImage:
-            'https://firebasestorage.googleapis.com/v0/b/tictact-a37a5.appspot.com/o/More%20game%20images%2Fhextris.webp?alt=media&token=302e901c-6c88-478f-bb0b-2736ed6e34ab',
+        gameImage: 'https://hextris.io/favicon.png',
         gameName: 'Hextris',
         gameURL: 'https://hextris.io/'),
     HTMLGames(
         gameImage:
-            'https://firebasestorage.googleapis.com/v0/b/tictact-a37a5.appspot.com/o/More%20game%20images%2Fclumsy-bird-open-source-game.webp?alt=media&token=344ad51f-4ca5-40ae-b71e-0a863f51e9d4',
+            'https://raw.githubusercontent.com/ellisonleao/clumsy-bird/main/src/title/background.png',
         gameName: 'Clumsy Bird',
         gameURL: 'https://ellisonleao.github.io/clumsy-bird/'),
     HTMLGames(
-        gameImage:
-            'https://firebasestorage.googleapis.com/v0/b/tictact-a37a5.appspot.com/o/More%20game%20images%2Fpacman-html5-canvat.webp?alt=media&token=94941943-d863-4dbf-9467-a7fb53819c3f',
+        gameImage: 'https://pacman.platzh1rsch.ch/favicon.ico',
         gameName: 'Pacman',
         gameURL: 'https://pacman.platzh1rsch.ch/'),
   ];
