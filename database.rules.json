@@ -1,0 +1,13 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    ".write": "auth != null",
+    "users": {
+      ".indexOn": ["score"]
+    },
+    "lobby": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}

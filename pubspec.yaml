@@ -1,0 +1,60 @@
+name: xobattle
+description: XO Battle - The ultimate X vs O battle game.
+publish_to: 'none'
+
+version: 1.1.3+13
+
+environment:
+  sdk: '>=3.5.2 <4.0.0'
+  
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  circular_countdown_timer: ^0.2.4
+  firebase_auth: ^6.0.1
+  firebase_database: ^12.0.0
+  firebase_storage: ^13.0.0
+  google_sign_in: ^7.2.0
+  cached_network_image: ^3.4.1
+  shared_preferences: ^2.3.4
+  image_picker: ^1.1.2
+  audioplayers: ^6.1.0
+  path_provider: ^2.1.5
+  google_mobile_ads: ^7.0.0
+  flutter_inapp_purchase: ^8.2.7
+  webview_flutter: ^4.9.0
+  url_launcher: ^6.3.1
+  in_app_review: ^2.0.10
+  share_plus: ^12.0.1
+  the_apple_sign_in: ^1.1.1
+  unity_ads_plugin: ^0.3.22
+  flutter_svg: ^2.0.16
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  flutter_launcher_icons: ^0.14.2
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/launcher_icon.png"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/music/
+    - assets/images/
+    - assets/language/
+    - assets/svgImages/
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins.ttf
+    - family: DISPLATTER
+      fonts:
+        - asset: assets/fonts/DISPLATTER.OTF
