@@ -117,10 +117,10 @@ class _Connect4GameScreenState extends State<Connect4GameScreen> {
   void _showResult(bool won, bool draw) {
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
       backgroundColor: surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
       title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      content: Text(won ? '+${widget.args.entryFee * 2} coins!' : draw ? 'No winner' : 'Better luck next time', style: TextStyle(color: secondarySelectedColor), textAlign: TextAlign.center),
-      actions: [TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
+      content: Text(won ? '+${widget.args.entryFee * 2} coins!' : draw ? 'No winner' : 'Better luck next time', style: TextStyle(color: xColor), textAlign: TextAlign.center),
+      actions: [TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: Text('Back', style: TextStyle(color: xColor)))],
     ));
   }
 
@@ -138,7 +138,7 @@ class _Connect4GameScreenState extends State<Connect4GameScreen> {
         child: SafeArea(child: Column(children: [
           gameHeader(context, 'CONNECT 4', _myTurn ? 'Your Turn' : "${widget.args.oppName}'s Turn", 0, 0, onExit: _handleExit),
           const SizedBox(height: 8),
-          if (!_myTurn && !_gameOver) gamePill("Waiting for ${widget.args.oppName}…", white.withValues(alpha: 0.5)),
+          if (!_myTurn && !_gameOver) gamePill("Waiting for ${widget.args.oppName}…", inkColor.withValues(alpha: 0.5)),
           if (_myTurn) gamePill('Tap a column to drop!', myColor),
 
           const Spacer(),

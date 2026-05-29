@@ -33,6 +33,7 @@ class _StreakModeScreenState extends State<StreakModeScreen> with TickerProvider
   int _streak = 0;
   int _bestStreak = 0;
   int _totalCoinsEarned = 0;
+  int _consecutiveDraws = 0;
 
   late AnimationController _streakCtrl;
   late Animation<double> _streakScale;
@@ -91,17 +92,20 @@ class _StreakModeScreenState extends State<StreakModeScreen> with TickerProvider
   }
 
   void _aiMove() {
-    if (_gameOver) return;
+    // Guard: widget may have been disposed before the delayed callback fires.
+    if (!mounted || _gameOver) return;
     final flat = List<dynamic>.generate(9, (i) => _board[i].isEmpty ? i : _board[i]);
     final move = _ai.getBestMove(flat, 3, 2); // Hard
     if (move < 0 || move >= 9) return;
     _board[move] = 'X';
     music.play(dice);
-    setState(() {});
-    if (_checkEnd()) return;
+    if (_checkEnd()) {
+      if (mounted) setState(() {});
+      return;
+    }
     _humanTurn = true;
     _status = 'Your Turn';
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   bool _checkEnd() {
@@ -117,9 +121,12 @@ class _StreakModeScreenState extends State<StreakModeScreen> with TickerProvider
     }
     if (!_board.contains('')) {
       _gameOver = true;
-      _status = 'Draw!';
-      setState(() {});
-      Future.delayed(const Duration(seconds: 2), _startGame);
+      _status = 'Draw — next round!';
+      _consecutiveDraws++;
+      if (mounted) setState(() {});
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) { _consecutiveDraws = 0; _startGame(); }
+      });
       return true;
     }
     return false;
@@ -142,26 +149,33 @@ class _StreakModeScreenState extends State<StreakModeScreen> with TickerProvider
   }
 
   void _onHumanWin() async {
+    if (!mounted) return;
     _streak++;
     int coins = streakCoinPerWin * _streak;
     if (_streak == 5)  coins += streakBonusAt5;
     if (_streak == 10) coins += streakBonusAt10;
     _totalCoinsEarned += coins;
     _status = '🔥 Win! +$coins coins';
-    await _saveBest();
-    await _awardCoins(coins);
     _streakCtrl.forward(from: 0);
-    setState(() {});
+    if (mounted) setState(() {});
     music.play(wingame);
-    Future.delayed(const Duration(seconds: 2), _startGame);
+    // Award coins in background — don't await so UI stays responsive.
+    _saveBest();
+    _awardCoins(coins);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) _startGame();
+    });
   }
 
   void _onHumanLoss() async {
+    if (!mounted) return;
     _status = 'STRIKER wins!';
-    await _saveBest();
+    if (mounted) setState(() {});
     music.play(losegame);
-    setState(() {});
-    Future.delayed(const Duration(milliseconds: 800), () => _showStreakSummary());
+    _saveBest();
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) _showStreakSummary();
+    });
   }
 
   Future<void> _awardCoins(int amount) async {

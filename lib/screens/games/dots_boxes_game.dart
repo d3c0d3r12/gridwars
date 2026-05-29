@@ -183,13 +183,13 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
     final draw = myScore == oppScore;
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
       backgroundColor: surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
       title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      content: Text('$myScore — $oppScore boxes', style: TextStyle(color: secondarySelectedColor, fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+      content: Text('$myScore — $oppScore boxes', style: TextStyle(color: xColor, fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
       actions: [TextButton(onPressed: () {
         if (Navigator.canPop(context)) Navigator.pop(context);
         if (Navigator.canPop(context)) Navigator.pop(context);
-      }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
+      }, child: Text('Back', style: TextStyle(color: xColor)))],
     ));
   }
 
@@ -208,7 +208,7 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
               gameHeader(context, 'DOTS & BOXES', _myTurn ? 'Your Turn' : "${widget.args.oppName}'s Turn", myScore, oppScore, onExit: _handleExit),
               const SizedBox(height: 6),
               if (_myTurn) gamePill('Tap a line to draw it — complete a box to score!', secondarySelectedColor),
-              if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName} is drawing…", white.withValues(alpha: 0.5)),
+              if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName} is drawing…", inkColor.withValues(alpha: 0.5)),
 
               Expanded(
                 child: Center(

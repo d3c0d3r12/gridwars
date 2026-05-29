@@ -156,13 +156,13 @@ class _RpsGameScreenState extends State<RpsGameScreen> {
 
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
       backgroundColor: surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
       title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      content: Text('$myScore — $oppScore', style: TextStyle(color: secondarySelectedColor, fontSize: 32, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+      content: Text('$myScore — $oppScore', style: TextStyle(color: xColor, fontSize: 32, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
       actions: [TextButton(onPressed: () {
         if (Navigator.canPop(context)) Navigator.pop(context);
         if (Navigator.canPop(context)) Navigator.pop(context);
-      }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
+      }, child: Text('Back', style: TextStyle(color: xColor)))],
     ));
   }
 
@@ -187,9 +187,9 @@ class _RpsGameScreenState extends State<RpsGameScreen> {
               if (_resultMsg.isNotEmpty)
                 _pill(_resultMsg, secondarySelectedColor),
               if (_myChoice.isNotEmpty && !oppPicked && !_gameOver)
-                _pill('Waiting for ${widget.args.oppName}…', white.withValues(alpha: 0.6)),
+                _pill('Waiting for ${widget.args.oppName}…', inkColor.withValues(alpha: 0.6)),
               if (_myChoice.isEmpty && !_gameOver)
-                _pill('Pick your move!', white.withValues(alpha: 0.7)),
+                _pill('Pick your move!', inkColor.withValues(alpha: 0.7)),
 
               const SizedBox(height: 20),
 
@@ -197,10 +197,10 @@ class _RpsGameScreenState extends State<RpsGameScreen> {
                 _choiceCircle(
                   label: 'You',
                   emoji: _myChoice.isNotEmpty ? _emoji[_myChoice]! : '?',
-                  color: secondarySelectedColor,
+                  color: xColor,
                   picked: _myChoice.isNotEmpty,
                 ),
-                Text('VS', style: TextStyle(color: white.withValues(alpha: 0.4), fontWeight: FontWeight.bold, fontSize: 18)),
+                Text('VS', style: TextStyle(color: inkColor.withValues(alpha: 0.4), fontWeight: FontWeight.bold, fontSize: 18)),
                 _choiceCircle(
                   label: widget.args.oppName,
                   emoji: oppPicked && _myChoice.isNotEmpty ? _emoji[_state[_oppKey]]! : '?',
@@ -219,12 +219,12 @@ class _RpsGameScreenState extends State<RpsGameScreen> {
                         width: 90, height: 90,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: white.withValues(alpha: 0.08),
-                          border: Border.all(color: white.withValues(alpha: 0.2), width: 1.5),
+                          color: inkColor.withValues(alpha: 0.08),
+                          border: Border.all(color: inkColor.withValues(alpha: 0.2), width: 1.5),
                         ),
                         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                           Text(_emoji[c]!, style: const TextStyle(fontSize: 34)),
-                          Text(c[0].toUpperCase() + c.substring(1), style: TextStyle(color: white.withValues(alpha: 0.7), fontSize: 10)),
+                          Text(c[0].toUpperCase() + c.substring(1), style: TextStyle(color: inkColor.withValues(alpha: 0.7), fontSize: 10)),
                         ]),
                       ),
                     )
@@ -234,7 +234,7 @@ class _RpsGameScreenState extends State<RpsGameScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   child: Text('Picked: ${_emoji[_myChoice]} ${_myChoice[0].toUpperCase()}${_myChoice.substring(1)}',
-                      style: TextStyle(color: secondarySelectedColor, fontWeight: FontWeight.bold, fontSize: 18)),
+                      style: TextStyle(color: xColor, fontWeight: FontWeight.bold, fontSize: 18)),
                 ),
             ])),
           ),
@@ -243,7 +243,7 @@ class _RpsGameScreenState extends State<RpsGameScreen> {
 
   Widget _choiceCircle({required String label, required String emoji, required Color color, required bool picked}) {
     return Column(children: [
-      Text(label, style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 11)),
+      Text(label, style: TextStyle(color: inkColor.withValues(alpha: 0.6), fontSize: 11)),
       const SizedBox(height: 8),
       Container(
         width: 80, height: 80,
@@ -264,11 +264,11 @@ Widget _header(BuildContext ctx, String title, String sub, int myScore, int oppS
     child: Row(children: [
       GestureDetector(onTap: onExit ?? () {
         if (Navigator.canPop(ctx)) Navigator.pop(ctx);
-      }, child: Icon(Icons.close, color: white.withValues(alpha: 0.7))),
+      }, child: Icon(Icons.close, color: inkColor.withValues(alpha: 0.7))),
       const Spacer(),
       Column(children: [
         Text(title, style: TextStyle(color: inkColor, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.5)),
-        Text(sub, style: TextStyle(color: secondarySelectedColor, fontSize: 11)),
+        Text(sub, style: TextStyle(color: xColor, fontSize: 11)),
       ]),
       const Spacer(),
       Container(

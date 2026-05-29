@@ -75,11 +75,13 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
 
   // FIXED: Correct win detection
   void _checkGameOver(List<int> board, int turn) {
-    final myPieces = board.where((c) => c == _myNum || c == _myNum + 2).length;
-    final oppPieces = board.where((c) => {
-      if (_myNum == 1) c == 2 || c == 4
-      else c == 1 || c == 3
-    }.contains(c)).length;
+    if (_gameOver) return;
+    final myPieces  = board.where((c) => c == _myNum || c == _myNum + 2).length;
+    // BUG WAS HERE: the Set literal `{if (cond) boolExpr}` created Set<bool>,
+    // so `.contains(intC)` always returned false. Fixed with correct int comparison.
+    final oppNum      = _myNum == 1 ? 2 : 1;
+    final oppKingNum  = _myNum == 1 ? 4 : 3;
+    final oppPieces   = board.where((c) => c == oppNum || c == oppKingNum).length;
 
     // If I have no pieces, I lose
     if (myPieces == 0) {
@@ -210,13 +212,13 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
   void _showResult(bool won) {
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
       backgroundColor: surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
       title: Text(won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      content: Text(won ? '+${widget.args.entryFee * 2} coins!' : 'Better luck next time', style: TextStyle(color: secondarySelectedColor), textAlign: TextAlign.center),
+      content: Text(won ? '+${widget.args.entryFee * 2} coins!' : 'Better luck next time', style: TextStyle(color: xColor), textAlign: TextAlign.center),
       actions: [TextButton(onPressed: () {
         if (Navigator.canPop(context)) Navigator.pop(context);
         if (Navigator.canPop(context)) Navigator.pop(context);
-      }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
+      }, child: Text('Back', style: TextStyle(color: xColor)))],
     ));
   }
 
@@ -236,7 +238,7 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
               const SizedBox(height: 6),
               if (_myTurn && _selected == -1) gamePill('Tap your piece to select, then tap to move', myColor),
               if (_myTurn && _selected != -1) gamePill('Tap destination (highlighted)', secondarySelectedColor),
-              if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName} is thinking…", white.withValues(alpha: 0.5)),
+              if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName} is thinking…", inkColor.withValues(alpha: 0.5)),
 
               Expanded(
                 child: Padding(

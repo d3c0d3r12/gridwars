@@ -87,6 +87,10 @@ class _SinglePlayerScreenActivityState
   String? currentMove, _profilePic = "", _username = "";
 
   void check() {
+    // Guard: once the game is over, never re-enter (prevents duplicate dialogs
+    // from the multiple check() calls per move sequence).
+    if (gameStatus != "started") return;
+
     // Check for 3x3 matrix
     if (widget.matrixSize == "Three") {
       for (var i = 0; i < buttons.length; i++) {
@@ -216,7 +220,10 @@ class _SinglePlayerScreenActivityState
   }
 
   void handleGameOver(String winner, int totalBoxes) {
-    _stopTimer(); // Stop custom timer
+    // Prevent showing the dialog more than once if check() fires multiple times.
+    if (calledCount > 1) return;
+    if (!mounted) return;
+    _stopTimer();
     winner == "1" ? music.play(wingame) : music.play(losegame);
     _countDownPlayer.pause();
     setState(() {});
@@ -285,31 +292,19 @@ class _SinglePlayerScreenActivityState
             if (gameStatus == "started" && mounted) playGame();
           }
         });
-        if (gameStatus == "started") {
-          check();
-        }
       }
 
       if (player == "O" && i != null) {
         if (buttons[i]["state"] == "") {
           music.play(dice);
-
           buttons[i]["state"] = "true";
-
           buttons[i]["player"] = "1";
           player = "X";
-          _stopTimer(); // Stop timer when human plays - AI's turn now
-
+          _stopTimer();
           currentMove = utils.getTranslated(context, "doraTurn");
-
           setState(() {});
+          // check() is called inside playGame() — no need to call it again here.
           playGame();
-          if (gameStatus == "started") {
-            check();
-          }
-        }
-        if (gameStatus == "started") {
-          check();
         }
       }
     }

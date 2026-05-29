@@ -66,8 +66,12 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
         }
       });
 
-      if (_myHits >= _totalShipCells) _endGame(false);
-      if (_oppHits >= _totalShipCells) _endGame(true);
+      // Call _endGame AFTER setState so widget tree is consistent.
+      if (_myHits >= _totalShipCells && !_gameOver) {
+        Future.microtask(() => _endGame(false));
+      } else if (_oppHits >= _totalShipCells && !_gameOver) {
+        Future.microtask(() => _endGame(true));
+      }
     });
 
     _statusSub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
@@ -109,14 +113,13 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
     final updates = {myKey: 1, shipsKey: _myShips};
     await ArcadeService.updateState(widget.args.type, widget.args.gameId, updates);
 
-    // FIXED: Proper phase transition with both ready check
-    if (_oppReady) {
-      // Both ready - start attack phase with player 1 first
+    // Only P1 writes the phase transition to avoid the race condition where
+    // both players detect _oppReady==true simultaneously and both write
+    // 'attack', causing duplicate Firebase writes with potentially stale ready flags.
+    if (_oppReady && widget.args.isP1) {
       await ArcadeService.updateState(widget.args.type, widget.args.gameId, {
         'phase': 'attack',
         'turn': 1,
-        'p1Ready': widget.args.isP1 ? 1 : (_oppReady ? 1 : 0),
-        'p2Ready': widget.args.isP1 ? (_oppReady ? 1 : 0) : 1,
       });
     }
   }
@@ -179,13 +182,13 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
   void _showResult(bool won) {
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
       backgroundColor: surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
       title: Text(won ? '🏆 All Ships Sunk!' : '💥 Fleet Destroyed!', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      content: Text(won ? 'You Win!\n+${widget.args.entryFee * 2} coins' : 'You Lose!', style: TextStyle(color: secondarySelectedColor, fontSize: 18), textAlign: TextAlign.center),
+      content: Text(won ? 'You Win!\n+${widget.args.entryFee * 2} coins' : 'You Lose!', style: TextStyle(color: xColor, fontSize: 18), textAlign: TextAlign.center),
       actions: [TextButton(onPressed: () {
         if (Navigator.canPop(context)) Navigator.pop(context);
         if (Navigator.canPop(context)) Navigator.pop(context);
-      }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
+      }, child: Text('Back', style: TextStyle(color: xColor)))],
     ));
   }
 
@@ -209,7 +212,7 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
                 Expanded(child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Column(children: [
-                    Text('YOUR FLEET', style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 11, letterSpacing: 2)),
+                    Text('YOUR FLEET', style: TextStyle(color: inkColor.withValues(alpha: 0.6), fontSize: 11, letterSpacing: 2)),
                     const SizedBox(height: 6),
                     Expanded(child: _grid(_myShips, isMyGrid: true, readonly: _myReady)),
                     const SizedBox(height: 12),
@@ -221,12 +224,12 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
                 )),
               ] else ...[
                 if (_myTurn) gamePill('Tap opponent\'s grid to fire! 🎯', secondarySelectedColor),
-                if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName} is firing…", white.withValues(alpha: 0.5)),
+                if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName} is firing…", inkColor.withValues(alpha: 0.5)),
                 const SizedBox(height: 6),
                 Expanded(child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Column(children: [
-                    Text('OPPONENT WATERS', style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 10, letterSpacing: 2)),
+                    Text('OPPONENT WATERS', style: TextStyle(color: inkColor.withValues(alpha: 0.6), fontSize: 10, letterSpacing: 2)),
                     const SizedBox(height: 4),
                     Expanded(child: GestureDetector(
                       onTapUp: (det) {
@@ -238,7 +241,7 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
                       child: _grid(_oppAttacks, isMyGrid: false, readonly: !_myTurn),
                     )),
                     const SizedBox(height: 8),
-                    Text('YOUR FLEET', style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 10, letterSpacing: 2)),
+                    Text('YOUR FLEET', style: TextStyle(color: inkColor.withValues(alpha: 0.6), fontSize: 10, letterSpacing: 2)),
                     const SizedBox(height: 4),
                     SizedBox(height: MediaQuery.of(context).size.height * 0.22,
                         child: _gridWithAttacks(_myShips, _myAttacks)),
@@ -271,7 +274,7 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(2),
-            border: Border.all(color: white.withValues(alpha: 0.08), width: 0.5),
+            border: Border.all(color: inkColor.withValues(alpha: 0.08), width: 0.5),
           ),
           child: Center(child: Text(icon, style: const TextStyle(fontSize: 8))),
         );
@@ -294,7 +297,7 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
         else if (ship == 1) bg = const Color(0xFF37474F);
         else bg = secondaryColor;
         return Container(
-          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(2), border: Border.all(color: white.withValues(alpha: 0.08), width: 0.5)),
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(2), border: Border.all(color: inkColor.withValues(alpha: 0.08), width: 0.5)),
           child: Center(child: Text(icon, style: const TextStyle(fontSize: 8))),
         );
       },

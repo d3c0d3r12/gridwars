@@ -301,9 +301,11 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (isplaying == false && oppositPlayerName.value != '') {
-      canPlay(keyOfGame.value);
+    // Guard: only trigger canPlay once per session. Without this, every rebuild
+    // while oppositPlayerName != '' re-calls canPlay(), pushing duplicate screens.
+    if (!isplaying && oppositPlayerName.value.isNotEmpty) {
       isplaying = true;
+      Future.microtask(() => canPlay(keyOfGame.value));
     }
 
     return PopScope(
@@ -536,9 +538,11 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                                   img = "dora_findopponent";
                                   btnTxtKey = "cancel";
                                 });
+                                // Cancel existing timer BEFORE starting new one to prevent leak.
+                                oppTimer?.cancel();
                                 findGame();
-                                oppTimer!.cancel();
-                                oppTimer = Timer(Duration(seconds: 60), () {
+                                isplaying = false; // Allow canPlay to fire again after re-match.
+                                oppTimer = Timer(const Duration(seconds: 60), () {
                                   if (_temp != null) {
                                     Dialogue.removeChild("Game", _temp);
                                   }

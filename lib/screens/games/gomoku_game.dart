@@ -38,9 +38,12 @@ class _GomokuGameScreenState extends State<GomokuGameScreen> {
       final st = Map<String, dynamic>.from(ev.snapshot.value as Map);
       final board = List<int>.from((st['board'] as List).map((e) => int.parse(e.toString())));
       final turn  = int.parse(st['turn'].toString());
-      final prevTurn = _turn;
       setState(() { _board = board; _turn = turn; });
-      if (prevTurn != _myNum && turn == _myNum && !_gameOver) {
+      // Always check for opponent win after any board update.
+      // The previous condition (prevTurn != _myNum && turn == _myNum) was wrong:
+      // when the opponent wins, 'turn' stays at their number, so the condition
+      // was never true and the win was never detected on the loser's device.
+      if (!_gameOver) {
         _scanOpponentWin(board);
       }
     });
@@ -129,10 +132,10 @@ class _GomokuGameScreenState extends State<GomokuGameScreen> {
   void _showResult(bool won, bool draw) {
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
       backgroundColor: surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
       title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      content: Text(won ? '+${widget.args.entryFee * 2} coins!' : draw ? 'No winner' : 'Better luck next time', style: TextStyle(color: secondarySelectedColor), textAlign: TextAlign.center),
-      actions: [TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
+      content: Text(won ? '+${widget.args.entryFee * 2} coins!' : draw ? 'No winner' : 'Better luck next time', style: TextStyle(color: xColor), textAlign: TextAlign.center),
+      actions: [TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: Text('Back', style: TextStyle(color: xColor)))],
     ));
   }
 
@@ -151,7 +154,7 @@ class _GomokuGameScreenState extends State<GomokuGameScreen> {
           gameHeader(context, 'GOMOKU', _myTurn ? 'Your Turn' : "${widget.args.oppName}'s Turn", 0, 0, onExit: _handleExit),
           const SizedBox(height: 6),
           if (_myTurn) gamePill('Place your stone (5 in a row wins)', _myNum == 1 ? myColor : oppColor),
-          if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName}'s turn…", white.withValues(alpha: 0.5)),
+          if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName}'s turn…", inkColor.withValues(alpha: 0.5)),
 
           const SizedBox(height: 8),
 

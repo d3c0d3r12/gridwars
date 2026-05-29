@@ -16,12 +16,12 @@ Widget gameHeader(
         onTap: onExit ?? () {
           if (Navigator.canPop(ctx)) Navigator.pop(ctx);
         },
-        child: Icon(Icons.close, color: white.withValues(alpha: 0.7)),
+        child: Icon(Icons.close, color: inkColor.withValues(alpha: 0.7)),
       ),
       const Spacer(),
       Column(children: [
         Text(title, style: TextStyle(color: inkColor, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.5)),
-        Text(sub, style: TextStyle(color: secondarySelectedColor, fontSize: 11)),
+        Text(sub, style: TextStyle(color: xColor, fontSize: 11)),
       ]),
       const Spacer(),
       Container(
@@ -49,37 +49,37 @@ Widget gamePill(String text, Color color) {
 void showGameResult(BuildContext context, bool won, int entryFee) {
   showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
     backgroundColor: surfaceColor,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
     title: Text(won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-    content: Text(won ? '+${entryFee * 2} coins!' : 'Better luck next time', style: TextStyle(color: secondarySelectedColor, fontSize: 16), textAlign: TextAlign.center),
+    content: Text(won ? '+${entryFee * 2} coins!' : 'Better luck next time', style: TextStyle(color: xColor, fontSize: 16), textAlign: TextAlign.center),
     actions: [TextButton(onPressed: () {
       if (Navigator.canPop(context)) Navigator.pop(context);
       if (Navigator.canPop(context)) Navigator.pop(context);
-    }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
+    }, child: Text('Back', style: TextStyle(color: xColor)))],
   ));
 }
 
 void showOpponentLeftDialog(BuildContext context) {
   showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
     backgroundColor: surfaceColor,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
     title: Text('🏆 You Win!', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-    content: Text('Opponent left the game.', style: TextStyle(color: secondarySelectedColor, fontSize: 15), textAlign: TextAlign.center),
+    content: Text('Opponent left the game.', style: TextStyle(color: xColor, fontSize: 15), textAlign: TextAlign.center),
     actions: [TextButton(onPressed: () {
       if (Navigator.canPop(context)) Navigator.pop(context);
       if (Navigator.canPop(context)) Navigator.pop(context);
-    }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
+    }, child: Text('Back', style: TextStyle(color: xColor)))],
   ));
 }
 
 void showLeaveConfirmDialog(BuildContext context, VoidCallback onConfirm) {
   showDialog(context: context, barrierDismissible: true, builder: (_) => AlertDialog(
     backgroundColor: surfaceColor,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
     title: Text('Leave Game?', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-    content: Text('Your opponent wins if you leave.', style: TextStyle(color: white.withValues(alpha: 0.7), fontSize: 14), textAlign: TextAlign.center),
+    content: Text('Your opponent wins if you leave.', style: TextStyle(color: inkColor.withValues(alpha: 0.7), fontSize: 14), textAlign: TextAlign.center),
     actions: [
-      TextButton(onPressed: () => Navigator.pop(context), child: Text('Stay', style: TextStyle(color: secondarySelectedColor))),
+      TextButton(onPressed: () => Navigator.pop(context), child: Text('Stay', style: TextStyle(color: xColor))),
       TextButton(
         onPressed: () {
           Navigator.pop(context);
