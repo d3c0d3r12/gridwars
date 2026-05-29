@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../helpers/color.dart';
 import '../helpers/constant.dart';
 import '../helpers/string.dart';
+import '../helpers/theme_manager.dart';
 import '../helpers/utils.dart';
 import '../functions/dialoges.dart';
 import '../functions/getCoin.dart';
@@ -124,6 +125,28 @@ class _ProfileBodyState extends State<Profile>
                     _buildProfileCard(),
                     _buildStatCards(),
                     const SizedBox(height: 24),
+                    _buildSection('Appearance', [
+                      ValueListenableBuilder<bool>(
+                        valueListenable: ThemeManager.isDark,
+                        builder: (_, dark, __) => _SettingsRow(
+                          icon: dark
+                              ? Icons.dark_mode_rounded
+                              : Icons.light_mode_rounded,
+                          iconColor: dark
+                              ? const Color(0xFF9C27B0)
+                              : const Color(0xFFFF9800),
+                          title: dark ? 'Dark Mode' : 'Light Mode',
+                          trailing: _Toggle(
+                            on: dark,
+                            onChange: (_) async {
+                              await ThemeManager.toggle();
+                              if (mounted) setState(() {});
+                            },
+                          ),
+                          isLast: true,
+                        ),
+                      ),
+                    ]),
                     _buildSection('Sound & Feel', [
                       _SettingsRow(
                         icon: Icons.volume_up_rounded,
@@ -315,7 +338,7 @@ class _ProfileBodyState extends State<Profile>
                     ]),
                     const SizedBox(height: 16),
                     Center(
-                      child: Text('XO Battle · v1.1.3',
+                      child: Text('Chilling Zone · v1.1.3',
                           style:
                               TextStyle(fontSize: 12, color: ink3Color)),
                     ),

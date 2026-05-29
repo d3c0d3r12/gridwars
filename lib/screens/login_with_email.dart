@@ -95,7 +95,7 @@ class _LoginWithEmailState extends State<LoginWithEmail>
                                 color: inkColor),
                           ),
                           const SizedBox(height: 6),
-                          Text('Welcome back to XO Battle',
+                          Text('Welcome back to Chilling Zone',
                               style: TextStyle(
                                   fontSize: 14, color: ink2Color)),
                           const SizedBox(height: 32),

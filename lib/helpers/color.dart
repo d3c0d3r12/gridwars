@@ -1,52 +1,93 @@
 import 'package:flutter/material.dart';
 
-// ── Background / Canvas ─────────────────────────────────────────────────────
-final Color bgColor        = const Color(0xFFF4F5F8); // cool near-white
-final Color surfaceColor   = const Color(0xFFFFFFFF); // card surface
-final Color surface2Color  = const Color(0xFFF9FAFC); // subtle surface tint
+// ── All color variables are mutable so ThemeManager can hot-swap them ─────────
 
-// ── Ink / Text ───────────────────────────────────────────────────────────────
-final Color inkColor  = const Color(0xFF181A20); // primary text
-final Color ink2Color = const Color(0xFF565A66); // secondary text
-final Color ink3Color = const Color(0xFF9A9EAC); // muted text
+// Background / Canvas
+Color bgColor        = const Color(0xFFF4F5F8);
+Color surfaceColor   = const Color(0xFFFFFFFF);
+Color surface2Color  = const Color(0xFFF9FAFC);
 
-// ── Borders ──────────────────────────────────────────────────────────────────
-final Color lineColor  = const Color(0xFFE7E9EF);
-final Color line2Color = const Color(0xFFEFF1F5);
+// Ink / Text
+Color inkColor  = const Color(0xFF181A20);
+Color ink2Color = const Color(0xFF565A66);
+Color ink3Color = const Color(0xFF9A9EAC);
 
-// ── Brand accents ─────────────────────────────────────────────────────────────
-final Color xColor     = const Color(0xFF4B4EE6); // indigo — X / primary accent
-final Color xSoft      = const Color(0xFF4B4EE6).withValues(alpha: 0.10);
-final Color xSoft2     = const Color(0xFF4B4EE6).withValues(alpha: 0.16);
-final Color oColor     = const Color(0xFFFB6B5B); // coral — O accent
-final Color oSoft      = const Color(0xFFFB6B5B).withValues(alpha: 0.12);
-final Color oSoft2     = const Color(0xFFFB6B5B).withValues(alpha: 0.18);
-final Color goldColor  = const Color(0xFFECA13A); // gold — coins / ranking
-final Color goldSoft   = const Color(0xFFECA13A).withValues(alpha: 0.14);
-final Color goodColor  = const Color(0xFF19B36B); // green — wins / positive
+// Borders
+Color lineColor  = const Color(0xFFE7E9EF);
+Color line2Color = const Color(0xFFEFF1F5);
 
-// ── Legacy aliases (backward compat — semantic meaning updated) ───────────────
-// These keep the same variable name so existing code that uses them still
-// compiles; their VALUES have been updated to the new light-theme equivalents.
-final Color primaryColor           = bgColor;       // was dark bg → now light bg
-final Color secondaryColor         = surfaceColor;  // was dark card → now white card
-final Color secondarySelectedColor = xColor;        // was amber → now indigo accent
-final Color white                  = const Color(0xFFFFFFFF);
-final Color lightWhite             = const Color(0xFFE9E9E9);
-final Color back                   = const Color(0xFFF1F1F1);
-final Color yellow                 = goldColor;     // was amber gold — keep
-final Color red                    = const Color(0xFFFF4757);
-final Color grey                   = Colors.grey;
+// Brand accents (same in both themes)
+Color xColor    = const Color(0xFF4B4EE6);
+Color xSoft     = const Color(0xFF4B4EE6).withValues(alpha: 0.10);
+Color xSoft2    = const Color(0xFF4B4EE6).withValues(alpha: 0.16);
+Color oColor    = const Color(0xFFFB6B5B);
+Color oSoft     = const Color(0xFFFB6B5B).withValues(alpha: 0.12);
+Color oSoft2    = const Color(0xFFFB6B5B).withValues(alpha: 0.18);
+Color goldColor = const Color(0xFFECA13A);
+Color goldSoft  = const Color(0xFFECA13A).withValues(alpha: 0.14);
+Color goodColor = const Color(0xFF19B36B);
 
-// ── Shadows ───────────────────────────────────────────────────────────────────
+// Legacy aliases
+Color primaryColor           = bgColor;
+Color secondaryColor         = surfaceColor;
+Color secondarySelectedColor = xColor;
+Color white                  = const Color(0xFFFFFFFF);
+Color lightWhite             = const Color(0xFFE9E9E9);
+Color back                   = const Color(0xFFF1F1F1);
+Color yellow                 = goldColor;
+Color red                    = const Color(0xFFFF4757);
+Color grey                   = Colors.grey;
+
+// Shadows
 const BoxShadow shadowSm = BoxShadow(color: Color(0x0D141623), blurRadius: 2, offset: Offset(0, 1));
 const BoxShadow shadow   = BoxShadow(color: Color(0x29161C2D), blurRadius: 18, spreadRadius: -8, offset: Offset(0, 6));
 const BoxShadow shadowLg = BoxShadow(color: Color(0x4D1C203C), blurRadius: 48, spreadRadius: -20, offset: Offset(0, 22));
 
-// ── Card decoration shortcut ──────────────────────────────────────────────────
 BoxDecoration cardDecoration({double radius = 22, Color? bg}) => BoxDecoration(
   color: bg ?? surfaceColor,
   border: Border.all(color: lineColor, width: 1),
   borderRadius: BorderRadius.circular(radius),
   boxShadow: [shadowSm],
 );
+
+// ── Light theme values ─────────────────────────────────────────────────────────
+void setLightTheme() {
+  bgColor        = const Color(0xFFF4F5F8);
+  surfaceColor   = const Color(0xFFFFFFFF);
+  surface2Color  = const Color(0xFFF9FAFC);
+  inkColor       = const Color(0xFF181A20);
+  ink2Color      = const Color(0xFF565A66);
+  ink3Color      = const Color(0xFF9A9EAC);
+  lineColor      = const Color(0xFFE7E9EF);
+  line2Color     = const Color(0xFFEFF1F5);
+  xSoft          = const Color(0xFF4B4EE6).withValues(alpha: 0.10);
+  xSoft2         = const Color(0xFF4B4EE6).withValues(alpha: 0.16);
+  oSoft          = const Color(0xFFFB6B5B).withValues(alpha: 0.12);
+  oSoft2         = const Color(0xFFFB6B5B).withValues(alpha: 0.18);
+  goldSoft       = const Color(0xFFECA13A).withValues(alpha: 0.14);
+  // legacy aliases
+  primaryColor           = bgColor;
+  secondaryColor         = surfaceColor;
+  secondarySelectedColor = xColor;
+}
+
+// ── Dark theme values ──────────────────────────────────────────────────────────
+void setDarkTheme() {
+  bgColor        = const Color(0xFF0C0618);  // deep purple-black
+  surfaceColor   = const Color(0xFF1E1040);  // rich violet card
+  surface2Color  = const Color(0xFF150D35);  // slightly darker card
+  inkColor       = const Color(0xFFFFFFFF);  // white text
+  ink2Color      = const Color(0xFFFFFFFF).withValues(alpha: 0.65);
+  ink3Color      = const Color(0xFFFFFFFF).withValues(alpha: 0.38);
+  lineColor      = const Color(0xFFFFFFFF).withValues(alpha: 0.12);
+  line2Color     = const Color(0xFFFFFFFF).withValues(alpha: 0.07);
+  xSoft          = const Color(0xFF4B4EE6).withValues(alpha: 0.22);
+  xSoft2         = const Color(0xFF4B4EE6).withValues(alpha: 0.32);
+  oSoft          = const Color(0xFFFB6B5B).withValues(alpha: 0.20);
+  oSoft2         = const Color(0xFFFB6B5B).withValues(alpha: 0.28);
+  goldSoft       = const Color(0xFFECA13A).withValues(alpha: 0.20);
+  // legacy aliases
+  primaryColor           = bgColor;
+  secondaryColor         = surfaceColor;
+  secondarySelectedColor = xColor;
+}

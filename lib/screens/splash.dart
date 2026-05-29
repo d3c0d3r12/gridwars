@@ -171,26 +171,26 @@ class _SplashScreenState extends State<SplashScreen>
                       opacity: _textOpacity.value,
                       child: Column(
                         children: [
-                          // XO BATTLE wordmark
-                          RichText(
-                            text: TextSpan(
-                              style: TextStyle(
-                                fontFamily: 'DISPLATTER',
-                                fontSize: 36,
-                                letterSpacing: 5,
-                              ),
-                              children: [
-                                TextSpan(
-                                    text: 'X',
-                                    style: TextStyle(color: xColor)),
-                                TextSpan(
-                                    text: 'O',
-                                    style: TextStyle(color: oColor)),
-                                TextSpan(
-                                    text: ' BATTLE',
-                                    style: TextStyle(color: inkColor)),
-                              ],
-                            ),
+                          // CHILLING ZONE wordmark
+                          Column(
+                            children: [
+                              Text('CHILLING',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 30,
+                                    color: inkColor,
+                                    letterSpacing: 4,
+                                  )),
+                              Text('ZONE',
+                                  style: const TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 26,
+                                    color: Color(0xFF00B8D4),
+                                    letterSpacing: 8,
+                                  )),
+                            ],
                           ),
                           const SizedBox(height: 10),
                           Container(
@@ -199,17 +199,17 @@ class _SplashScreenState extends State<SplashScreen>
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                  color: xColor.withValues(alpha: 0.3),
+                                  color: const Color(0xFF00B8D4).withValues(alpha: 0.4),
                                   width: 1),
-                              color: xSoft,
+                              color: const Color(0xFF00B8D4).withValues(alpha: 0.08),
                             ),
-                            child: Text(
-                              'Calculate Every Move',
+                            child: const Text(
+                              'GAME ON.  CHILL ON.',
                               style: TextStyle(
-                                color: xColor,
-                                letterSpacing: 1.8,
+                                color: Color(0xFF00B8D4),
+                                letterSpacing: 2,
                                 fontWeight: FontWeight.w600,
-                                fontSize: 12,
+                                fontSize: 11,
                               ),
                             ),
                           ),

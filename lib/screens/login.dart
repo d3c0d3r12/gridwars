@@ -8,6 +8,7 @@ import '../helpers/color.dart';
 import '../helpers/constant.dart';
 import '../helpers/utils.dart';
 import '../functions/authentication.dart';
+import '../widgets/xo_logo.dart';
 import 'login_with_email.dart';
 import 'splash.dart';
 
@@ -99,35 +100,36 @@ class _AuthOptionsScreenState extends State<Login>
                       SizedBox(height: size.height * 0.1),
 
                       // Brand
-                      RichText(
-                        text: TextSpan(
-                          style: const TextStyle(
-                            fontFamily: 'DISPLATTER',
-                            fontSize: 40,
-                            letterSpacing: 4,
-                          ),
-                          children: [
-                            TextSpan(
-                                text: 'X',
-                                style: TextStyle(color: xColor)),
-                            TextSpan(
-                                text: 'O',
-                                style: TextStyle(color: oColor)),
-                            TextSpan(
-                                text: ' BATTLE',
-                                style: TextStyle(color: inkColor)),
-                          ],
-                        ),
+                      XOBattleLogo(size: 90),
+                      const SizedBox(height: 16),
+                      Column(
+                        children: [
+                          Text('CHILLING',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w800,
+                                fontSize: 28,
+                                color: inkColor,
+                                letterSpacing: 4,
+                              )),
+                          const Text('ZONE',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w800,
+                                fontSize: 24,
+                                color: Color(0xFF00B8D4),
+                                letterSpacing: 7,
+                              )),
+                        ],
                       ),
-                      const SizedBox(height: 10),
-                      Text(
-                        utils.getTranslated(
-                            context, "CalculateEveryMove"),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'GAME ON.  CHILL ON.',
                         style: TextStyle(
-                          fontSize: 13.5,
-                          color: ink2Color,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 1.2,
+                          fontSize: 11,
+                          color: Color(0xFF00B8D4),
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 2,
                         ),
                       ),
 

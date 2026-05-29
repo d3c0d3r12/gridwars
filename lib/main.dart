@@ -1,5 +1,6 @@
 import 'package:xobattle/helpers/demo_localization.dart';
 import 'package:xobattle/firebase_options.dart';
+import 'package:xobattle/helpers/theme_manager.dart';
 import 'package:xobattle/routes/routes.dart';
 import 'package:xobattle/screens/splash.dart';
 import 'package:xobattle/widgets/life_cycle_manager.dart';
@@ -11,7 +12,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'helpers/color.dart';
 import 'helpers/constant.dart';
 
-/// Compatible with Flutter [3.35.7]
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -21,6 +21,8 @@ Future<void> main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
   }
+
+  await ThemeManager.initialize();
 
   runApp(MyApp());
 }
@@ -41,104 +43,111 @@ class _MyAppState extends State<MyApp> {
   Locale? _locale;
 
   setLocale(Locale locale) {
-    if (mounted)
-      setState(() {
-        _locale = locale;
-      });
+    if (mounted) setState(() => _locale = locale);
   }
 
   @override
   void didChangeDependencies() {
     utils.getLocale().then((locale) {
-      if (mounted)
-        setState(() {
-          this._locale = locale;
-        });
+      if (mounted) setState(() => this._locale = locale);
     });
     super.didChangeDependencies();
   }
 
   @override
   Widget build(BuildContext context) {
-    return LifeCycleManager(
-      child: MaterialApp(
-        locale: _locale,
-        supportedLocales: [
-          Locale("en", "US"),
-          Locale("es", "ES"),
-          Locale("hi", "IN"),
-          Locale("ar", "DZ"),
-          Locale("ru", "RU"),
-          Locale("ja", "JP"),
-          Locale("de", "DE")
-        ],
-        localizationsDelegates: [
-          DemoLocalization.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        localeResolutionCallback: (locale, supportedLocales) {
-          for (var supportedLocale in supportedLocales) {
-            if (supportedLocale.languageCode == locale!.languageCode &&
-                supportedLocale.countryCode == locale.countryCode) {
-              return supportedLocale;
-            }
-          }
-          return supportedLocales.first;
-        },
-        title: appName,
-        debugShowCheckedModeBanner: false,
-        home: SplashScreen(),
-        onGenerateRoute: (settings) {
-          final builder = Routes.data[settings.name];
-          if (builder == null) return null;
-          final isSplash = settings.name == '/splash';
-          return MaterialPageRoute(
-            settings: settings,
-            builder: (context) => isSplash
-                ? builder(context)
-                : Container(
-                    color: bgColor,
-                    child: SafeArea(top: false, child: builder(context)),
-                  ),
-          );
-        },
-        theme: ThemeData(
-          useMaterial3: false,
+    return ValueListenableBuilder<bool>(
+      valueListenable: ThemeManager.isDark,
+      builder: (context, isDark, child) {
+        final statusBarStyle = isDark
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark;
+
+        return LifeCycleManager(
+          child: MaterialApp(
+            locale: _locale,
+            supportedLocales: const [
+              Locale("en", "US"),
+              Locale("es", "ES"),
+              Locale("hi", "IN"),
+              Locale("ar", "DZ"),
+              Locale("ru", "RU"),
+              Locale("ja", "JP"),
+              Locale("de", "DE"),
+            ],
+            localizationsDelegates: const [
+              DemoLocalization.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            localeResolutionCallback: (locale, supportedLocales) {
+              for (var sl in supportedLocales) {
+                if (sl.languageCode == locale?.languageCode &&
+                    sl.countryCode == locale?.countryCode) {
+                  return sl;
+                }
+              }
+              return supportedLocales.first;
+            },
+            title: appName,
+            debugShowCheckedModeBanner: false,
+            home: SplashScreen(),
+            onGenerateRoute: (settings) {
+              final builder = Routes.data[settings.name];
+              if (builder == null) return null;
+              final isSplash = settings.name == '/splash';
+              return MaterialPageRoute(
+                settings: settings,
+                builder: (context) => isSplash
+                    ? builder(context)
+                    : Container(
+                        color: bgColor,
+                        child: SafeArea(top: false, child: builder(context)),
+                      ),
+              );
+            },
+            theme: _buildTheme(statusBarStyle),
+          ),
+        );
+      },
+    );
+  }
+
+  ThemeData _buildTheme(SystemUiOverlayStyle statusStyle) {
+    return ThemeData(
+      useMaterial3: false,
+      fontFamily: 'Poppins',
+      scaffoldBackgroundColor: bgColor,
+      textTheme: TextTheme(
+        bodyLarge: const TextStyle(),
+        bodyMedium: const TextStyle(),
+      ).apply(
+        bodyColor: inkColor,
+        displayColor: inkColor,
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: bgColor,
+        elevation: 0,
+        systemOverlayStyle: statusStyle,
+        iconTheme: IconThemeData(color: inkColor),
+        titleTextStyle: TextStyle(
+          color: inkColor,
           fontFamily: 'Poppins',
-          scaffoldBackgroundColor: bgColor,
-          textTheme: TextTheme(
-            bodyLarge: TextStyle(),
-            bodyMedium: TextStyle(),
-          ).apply(
-            bodyColor: inkColor,
-            displayColor: inkColor,
-          ),
-          appBarTheme: AppBarTheme(
-            backgroundColor: bgColor,
-            elevation: 0,
-            systemOverlayStyle: SystemUiOverlayStyle.dark,
-            iconTheme: IconThemeData(color: inkColor),
-            titleTextStyle: TextStyle(
-              color: inkColor,
-              fontFamily: 'Poppins',
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          primaryColor: xColor,
-          colorScheme: ColorScheme.fromSwatch().copyWith(
-            primary: xColor,
-            secondary: xColor,
-            background: bgColor,
-            surface: surfaceColor,
-          ),
-          dialogTheme: DialogThemeData(
-            backgroundColor: surfaceColor,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-          ),
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
         ),
+      ),
+      primaryColor: xColor,
+      colorScheme: ColorScheme.fromSwatch().copyWith(
+        primary: xColor,
+        secondary: xColor,
+        surface: surfaceColor,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: surfaceColor,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       ),
     );
   }

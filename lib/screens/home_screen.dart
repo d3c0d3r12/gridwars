@@ -15,6 +15,7 @@ import '../helpers/utils.dart';
 import '../functions/dialoges.dart';
 import '../functions/getCoin.dart';
 import '../models/sound_effect.dart';
+import '../widgets/xo_logo.dart';
 import 'arcade.dart';
 import 'daily_challenge.dart';
 import 'finding_player.dart';
@@ -216,21 +217,34 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
         child: Row(
           children: [
             // Wordmark
-            RichText(
-              text: TextSpan(
-                style: const TextStyle(
-                  fontFamily: 'Poppins',
-                  fontWeight: FontWeight.w800,
-                  fontSize: 22,
-                  letterSpacing: 1.5,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                XOBattleLogo(size: 32),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('CHILLING',
+                        style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            color: inkColor,
+                            letterSpacing: 1.5,
+                            height: 1.1)),
+                    Text('ZONE',
+                        style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: Color(0xFF00B8D4),
+                            letterSpacing: 3.5,
+                            height: 1.1)),
+                  ],
                 ),
-                children: [
-                  TextSpan(text: 'X', style: TextStyle(color: xColor)),
-                  TextSpan(text: 'O', style: TextStyle(color: oColor)),
-                  TextSpan(
-                      text: ' BATTLE', style: TextStyle(color: inkColor)),
-                ],
-              ),
+              ],
             ),
             const Spacer(),
             // Coin chip
