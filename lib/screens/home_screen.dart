@@ -490,8 +490,11 @@ class HomeScreenActivityState extends State<HomeScreenActivity> with TickerProvi
                               decoration: BoxDecoration(
                                 color: selectedLevelIndex == typeOfLevel.indexOf(levelName)
                                     ? secondarySelectedColor
-                                    : back,
+                                    : secondaryColor,
                                 borderRadius: BorderRadius.circular(10.0),
+                                border: selectedLevelIndex == typeOfLevel.indexOf(levelName)
+                                    ? null
+                                    : Border.all(color: white.withValues(alpha: 0.12)),
                               ),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -513,7 +516,7 @@ class HomeScreenActivityState extends State<HomeScreenActivity> with TickerProvi
         actions: [
           ElevatedButton.icon(
             style: ButtonStyle(
-              backgroundColor: WidgetStateProperty.all(back),
+              backgroundColor: WidgetStateProperty.all(secondarySelectedColor),
               shape: WidgetStateProperty.all(const RoundedRectangleBorder(
                   borderRadius: BorderRadius.all(Radius.circular(20.0)))),
             ),
@@ -569,7 +572,7 @@ class HomeScreenActivityState extends State<HomeScreenActivity> with TickerProvi
         actions: [
           ElevatedButton.icon(
             style: ButtonStyle(
-                backgroundColor: WidgetStateProperty.all(back),
+                backgroundColor: WidgetStateProperty.all(secondarySelectedColor),
                 shape: WidgetStateProperty.all(const RoundedRectangleBorder(
                     borderRadius: BorderRadius.all(Radius.circular(20.0))))),
             onPressed: () async {
@@ -891,7 +894,7 @@ class _ChipGridState extends State<ChipGrid> {
               }
             },
             child: Chip(
-              backgroundColor: selectedIndex == i ? secondarySelectedColor : back,
+              backgroundColor: selectedIndex == i ? secondarySelectedColor : secondaryColor,
               label: Padding(
                 padding: EdgeInsets.symmetric(horizontal: widget.avatar ? 0 : 8.0),
                 child: Text(widget.list[i].toString(),

@@ -414,7 +414,7 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                                         padding: const EdgeInsets.all(5.0),
                                         child: CircleAvatar(
                                             radius: 50,
-                                            backgroundColor: back,
+                                            backgroundColor: secondaryColor,
                                             backgroundImage: oppositPlayerName
                                                             .value !=
                                                         "" &&
@@ -490,7 +490,7 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                                     horizontal: 10, vertical: 5),
                                 decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(20),
-                                    color: back),
+                                    color: secondarySelectedColor),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
