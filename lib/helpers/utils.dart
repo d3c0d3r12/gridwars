@@ -207,10 +207,10 @@ class Utils {
         builder: (context) => PopScope(
               canPop: false,
               child: AlertDialog(
-                backgroundColor: secondaryColor,
+                backgroundColor: surfaceColor,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(20.0)),
-                  side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.35), width: 1.2),
+                  borderRadius: BorderRadius.all(Radius.circular(22.0)),
+                  side: BorderSide(color: lineColor, width: 1),
                 ),
                 title: title,
                 content: content,
@@ -228,11 +228,8 @@ class Utils {
   }
 
   static final BoxDecoration _cachedGradBack = BoxDecoration(
-      gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          stops: [0.0, 0.5, 1.0],
-          colors: [secondaryColor, primaryColor, Color(0xFF06030F)]));
+    color: bgColor,
+  );
 
   BoxDecoration gradBack() => _cachedGradBack;
 
@@ -273,12 +270,12 @@ class Utils {
       content: Text(
         message,
         textAlign: TextAlign.center,
-        style: TextStyle(color: primaryColor, fontWeight: FontWeight.w600),
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
       ),
-      backgroundColor: secondarySelectedColor,
+      backgroundColor: inkColor,
       elevation: 4.0,
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ));
   }
 }

@@ -259,9 +259,9 @@ class _PassNPLayState extends State<PassNPLay> {
         return Alert(
           title: Text(
             utils.getTranslated(context, "aleart"),
-            style: TextStyle(color: white),
+            style: TextStyle(color: inkColor),
           ),
-          isMultipleAction: true,
+                                isMultipleAction: true,
           defaultActionButtonName: utils.getTranslated(context, "ok"),
           onTapActionButton: () {},
           content: Text(
@@ -327,7 +327,7 @@ class _PassNPLayState extends State<PassNPLay> {
       child: Scaffold(
         body: Container(
           padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-          decoration: utils.gradBack(),
+          color: bgColor,
           child: Column(
             children: [
               // Header with timer and quit button
@@ -355,7 +355,7 @@ class _PassNPLayState extends State<PassNPLay> {
                                 child: Text(
                                   '$secs',
                                   style: TextStyle(
-                                    color: secs <= 10 ? Colors.red : white,
+                                    color: secs <= 10 ? Colors.red : inkColor,
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -506,7 +506,7 @@ class _PassNPLayState extends State<PassNPLay> {
                         ],
                       ),
 
-                      const Expanded(
+                      Expanded(
                         child: Center(
                           child: getSvgImage(
                             imageName: "vs_small",

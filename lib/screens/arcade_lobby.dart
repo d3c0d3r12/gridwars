@@ -159,73 +159,91 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: utils.gradBack(),
-        child: SafeArea(
-          child: Column(children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-              child: Row(children: [
-                IconButton(
-                  icon: Icon(Icons.arrow_back, color: white),
-                  onPressed: () async {
-                    _sub?.cancel();
-                    _lobbySub?.cancel();
-                    _timeout?.cancel();
-                    if (_gameId.isNotEmpty && _searching) {
-                      await ArcadeService.cancelGame(widget.gameType, _gameId);
-                    }
-                    if (mounted) Navigator.pop(context);
-                  },
+      backgroundColor: bgColor,
+      body: SafeArea(
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Row(children: [
+              GestureDetector(
+                onTap: () async {
+                  _sub?.cancel();
+                  _lobbySub?.cancel();
+                  _timeout?.cancel();
+                  if (_gameId.isNotEmpty && _searching) {
+                    await ArcadeService.cancelGame(widget.gameType, _gameId);
+                  }
+                  if (mounted) Navigator.pop(context);
+                },
+                child: Container(
+                  width: 42, height: 42,
+                  decoration: BoxDecoration(
+                    color: surfaceColor, borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: lineColor), boxShadow: [shadowSm],
+                  ),
+                  child: Icon(Icons.arrow_back_rounded, color: inkColor, size: 20),
                 ),
-                const Spacer(),
-                Text(widget.gameName.toUpperCase(), style: TextStyle(color: white, fontWeight: FontWeight.bold, letterSpacing: 2)),
-                const Spacer(),
-                const SizedBox(width: 48),
-              ]),
+              ),
+              const Spacer(),
+              Text(widget.gameName.toUpperCase(),
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: inkColor, letterSpacing: 1.5)),
+              const Spacer(),
+              const SizedBox(width: 42),
+            ]),
+          ),
+
+          Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Container(
+              width: 110,
+              height: 110,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: widget.accent.withValues(alpha: 0.10),
+                border: Border.all(color: widget.accent.withValues(alpha: 0.35), width: 2),
+                boxShadow: [BoxShadow(color: widget.accent.withValues(alpha: 0.18), blurRadius: 30, spreadRadius: 5)],
+              ),
+              child: Center(child: _searching
+                  ? CircularProgressIndicator(color: widget.accent, strokeWidth: 3)
+                  : Icon(Icons.person_search_rounded, color: widget.accent, size: 48)),
             ),
 
-            Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const SizedBox(height: 28),
+
+            Text(_status, style: TextStyle(color: inkColor, fontSize: 15, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            if (_searching)
               Container(
-                width: 110,
-                height: 110,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: widget.accent.withValues(alpha: 0.12),
-                  border: Border.all(color: widget.accent.withValues(alpha: 0.4), width: 2),
-                  boxShadow: [BoxShadow(color: widget.accent.withValues(alpha: 0.25), blurRadius: 30, spreadRadius: 5)],
+                  color: goldSoft,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: goldColor.withValues(alpha: 0.3)),
                 ),
-                child: Center(child: _searching
-                    ? CircularProgressIndicator(color: widget.accent, strokeWidth: 3)
-                    : Icon(Icons.person_search_rounded, color: widget.accent, size: 48)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.monetization_on_rounded, color: goldColor, size: 14),
+                  const SizedBox(width: 4),
+                  Text('Entry: $fixedEntryFee • Win: ${fixedEntryFee * 2}',
+                      style: TextStyle(color: const Color(0xFF9A6516), fontWeight: FontWeight.w600, fontSize: 12)),
+                ]),
               ),
 
-              const SizedBox(height: 28),
+            const SizedBox(height: 32),
 
-              Text(_status, style: TextStyle(color: white.withValues(alpha: 0.85), fontSize: 15), textAlign: TextAlign.center),
-              const SizedBox(height: 8),
-              if (_searching)
-                Text('Entry: $fixedEntryFee coins • Winner takes ${fixedEntryFee * 2}',
-                    style: TextStyle(color: secondarySelectedColor, fontSize: 12)),
-
-              const SizedBox(height: 32),
-
-              if (!_searching)
-                GestureDetector(
-                  onTap: _retry,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      color: widget.accent.withValues(alpha: 0.2),
-                      border: Border.all(color: widget.accent.withValues(alpha: 0.5)),
-                    ),
-                    child: Text('Try Again', style: TextStyle(color: widget.accent, fontWeight: FontWeight.bold, fontSize: 15)),
+            if (!_searching)
+              GestureDetector(
+                onTap: _retry,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: widget.accent,
+                    boxShadow: [BoxShadow(color: widget.accent.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 8))],
                   ),
+                  child: const Text('Try Again', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
                 ),
-            ])),
-          ]),
-        ),
+              ),
+          ])),
+        ]),
       ),
     );
   }

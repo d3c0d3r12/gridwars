@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
-
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -17,7 +16,6 @@ import '../functions/dialoges.dart';
 import '../functions/getCoin.dart';
 import '../models/sound_effect.dart';
 import 'arcade.dart';
-import '../widgets/xo_logo.dart';
 import 'daily_challenge.dart';
 import 'finding_player.dart';
 import 'offline_play.dart';
@@ -33,10 +31,9 @@ class HomeScreenActivity extends StatefulWidget {
   HomeScreenActivityState createState() => HomeScreenActivityState();
 }
 
-class HomeScreenActivityState extends State<HomeScreenActivity> with TickerProviderStateMixin {
-  late AnimationController _floatCtrl;
+class HomeScreenActivityState extends State<HomeScreenActivity>
+    with TickerProviderStateMixin {
   late AnimationController _entryCtrl;
-  late Animation<double> _floatAnim;
   late Animation<double> _entryOpacity;
   late Animation<Offset> _entrySlide;
 
@@ -55,21 +52,13 @@ class HomeScreenActivityState extends State<HomeScreenActivity> with TickerProvi
   @override
   void initState() {
     super.initState();
-
-    _floatCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))
-      ..repeat(reverse: true);
-    _entryCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
-
-    _floatAnim = Tween<double>(begin: -8.0, end: 8.0).animate(
-      CurvedAnimation(parent: _floatCtrl, curve: Curves.easeInOut),
-    );
+    _entryCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 600));
     _entryOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _entryCtrl, curve: Curves.easeIn),
-    );
-    _entrySlide = Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero).animate(
-      CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOutCubic),
-    );
-
+        CurvedAnimation(parent: _entryCtrl, curve: Curves.easeIn));
+    _entrySlide =
+        Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero).animate(
+            CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOutCubic));
     _entryCtrl.forward();
     getSkinvalues();
     _getSavedLanguage();
@@ -80,7 +69,6 @@ class HomeScreenActivityState extends State<HomeScreenActivity> with TickerProvi
 
   @override
   void dispose() {
-    _floatCtrl.dispose();
     _entryCtrl.dispose();
     _coinSub?.cancel();
     super.dispose();
@@ -99,14 +87,13 @@ class HomeScreenActivityState extends State<HomeScreenActivity> with TickerProvi
 
   canP() async {
     var b = await utils.getSfxValue();
-    setState(() { canPlay = b; });
+    setState(() {
+      canPlay = b;
+    });
   }
 
   void coins() {
     try {
-      // detectChange uses onValue which fires immediately with the current value
-      // AND on every future change — no separate getCoin() call needed.
-      // Store the subscription so we can cancel it in dispose() to prevent leaks.
       _coinSub?.cancel();
       _coinSub = GetUserInfo().detectChange("coin", (val) {
         if (mounted) setState(() => coin = val ?? 0);
@@ -117,193 +104,98 @@ class HomeScreenActivityState extends State<HomeScreenActivity> with TickerProvi
   @override
   Widget build(BuildContext context) {
     getSkinvalues();
-    final size = MediaQuery.of(context).size;
 
-    return Scaffold(
-      backgroundColor: primaryColor,
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        systemOverlayStyle: const SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.light,
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: Row(
-          children: [
-            ShaderMask(
-              shaderCallback: (b) => LinearGradient(
-                colors: [white, secondarySelectedColor],
-              ).createShader(b),
-              child: Text(
-                appName,
-                style: const TextStyle(
-                  fontFamily: 'DISPLATTER',
-                  fontSize: 22,
-                  color: Colors.white,
-                  letterSpacing: 3,
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          GestureDetector(
-            onTap: () {
-              music.play(click);
-              Navigator.pushNamed(context, "/leaderboard");
-            },
-            child: getSvgImage(imageName: 'leaderboard_dark', height: 20, width: 20),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: () {
-              music.play(click);
-              Navigator.pushNamed(context, "/profile").then((_) {
-                _getSavedLanguage();
-                getSkinvalues();
-                setState(() {});
-              });
-            },
-            child: getSvgImage(imageName: 'menu_button', width: 52, height: 52),
-          ),
-        ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.transparent,
       ),
-      body: Container(
-        width: size.width,
-        height: size.height,
-        decoration: utils.gradBack(),
-        child: FadeTransition(
+      child: Scaffold(
+        backgroundColor: bgColor,
+        body: FadeTransition(
           opacity: _entryOpacity,
           child: SlideTransition(
             position: _entrySlide,
-            child: Column(
-              children: [
-                // Coin chip row
-                SafeArea(
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(child: _buildTopBar()),
+                SliverToBoxAdapter(child: _buildHeroCard()),
+                SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 8, right: 16, left: 16),
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: _CoinChip(coin: coin),
-                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
+                    child: _SectionLabel(label: 'Game Modes'),
                   ),
                 ),
-
-                // Mascot section
-                Expanded(
-                  flex: 5,
-                  child: _buildMascotSection(size),
-                ),
-
-                // Game mode cards (scrollable)
-                Expanded(
-                  flex: 6,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 4),
-                        _GameCard(
-                          icon: 'offline_white',
-                          title: utils.getTranslated(context, "OFFLINE_PLAY"),
-                          subtitle: utils.getTranslated(context, "Play_with_the_Clever_Fox_DORA"),
-                          accentColor: const Color(0xFF7C5CBF),
-                          onTap: () => playButtonPressed(0),
-                        ),
-                        const SizedBox(height: 10),
-                        _GameCard(
-                          icon: 'play_random',
-                          title: 'RANKED MATCH',
-                          subtitle: utils.getTranslated(context, "Find_your_match_around_the_world"),
-                          accentColor: secondarySelectedColor,
-                          isHighlighted: true,
-                          onTap: () => playButtonPressed(1),
-                        ),
-                        const SizedBox(height: 10),
-                        _GameCard(
-                          icon: 'passnplay_white',
-                          title: utils.getTranslated(context, "PASS_N_PLAY"),
-                          subtitle: utils.getTranslated(context, "Pass_N_Play_With_your_Friend"),
-                          accentColor: const Color(0xFF5B8ED6),
-                          onTap: () => playButtonPressed(2),
-                        ),
-                        const SizedBox(height: 10),
-                        _GameCard(
-                          icon: 'play_random',
-                          title: 'PRIVATE ROOM',
-                          subtitle: 'Create or join a room with a friend',
-                          accentColor: const Color(0xFF00BCD4),
-                          onTap: () => _openPrivateRoom(),
-                        ),
-                        const SizedBox(height: 10),
-                        _GameCard(
-                          icon: 'offline_white',
-                          title: 'BLITZ MODE',
-                          subtitle: '7 seconds per move — think fast!',
-                          accentColor: const Color(0xFFFF5252),
-                          onTap: () => _openBlitz(),
-                        ),
-                        const SizedBox(height: 10),
-                        _GameCard(
-                          icon: 'offline_dark',
-                          title: 'STREAK CHALLENGE',
-                          subtitle: 'Beat STRIKER in a row, earn coins',
-                          accentColor: const Color(0xFF66BB6A),
-                          onTap: () => _openStreak(),
-                        ),
-                        const SizedBox(height: 10),
-                        _GameCard(
-                          icon: 'leaderboard_dark',
-                          title: 'DAILY CHALLENGE',
-                          subtitle: 'One puzzle per day — win 50 coins',
-                          accentColor: const Color(0xFFFFB300),
-                          onTap: () => _openDaily(),
-                        ),
-                        const SizedBox(height: 10),
-                        // Arcade banner
-                        GestureDetector(
-                          onTap: () { music.play(click); Navigator.push(context, CupertinoPageRoute(builder: (_) => const ArcadeScreen())); },
-                          child: Container(
-                            height: 72,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(18),
-                              gradient: LinearGradient(
-                                colors: [const Color(0xFF6A1B9A).withValues(alpha: 0.6), const Color(0xFF00ACC1).withValues(alpha: 0.4)],
-                                begin: Alignment.centerLeft, end: Alignment.centerRight,
-                              ),
-                              border: Border.all(color: const Color(0xFFCE93D8).withValues(alpha: 0.55), width: 1.2),
-                            ),
-                            child: Row(children: [
-                              Container(width: 4, height: 72,
-                                decoration: BoxDecoration(
-                                  borderRadius: const BorderRadius.only(topLeft: Radius.circular(18), bottomLeft: Radius.circular(18)),
-                                  gradient: const LinearGradient(colors: [Color(0xFFE91E63), Color(0xFF9C27B0)], begin: Alignment.topCenter, end: Alignment.bottomCenter),
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Container(width: 40, height: 40,
-                                decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFFE91E63).withValues(alpha: 0.2)),
-                                child: const Center(child: Text('🕹️', style: TextStyle(fontSize: 22))),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Text('ARCADE', style: TextStyle(color: white, fontWeight: FontWeight.w800, fontSize: 14, letterSpacing: 1.5)),
-                                Text('6 games: RPS, Connect 4, Checkers…', style: TextStyle(color: white.withValues(alpha: 0.5), fontSize: 11)),
-                              ])),
-                              Padding(padding: const EdgeInsets.only(right: 16),
-                                child: Container(width: 32, height: 32,
-                                  decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFFE91E63).withValues(alpha: 0.2)),
-                                  child: const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFFCE93D8), size: 14),
-                                ),
-                              ),
-                            ]),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                    ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      _ModeCard(
+                        icon: Icons.person,
+                        iconColor: xColor,
+                        iconBg: xSoft,
+                        title: utils.getTranslated(context, "OFFLINE_PLAY"),
+                        sub: utils.getTranslated(
+                            context, "Play_with_the_Clever_Fox_DORA"),
+                        onTap: () => playButtonPressed(0),
+                      ),
+                      const SizedBox(height: 11),
+                      _ModeCard(
+                        icon: Icons.public,
+                        iconColor: goldColor,
+                        iconBg: goldSoft,
+                        title: 'RANKED MATCH',
+                        sub: utils.getTranslated(
+                            context, "Find_your_match_around_the_world"),
+                        onTap: () => playButtonPressed(1),
+                        accent: true,
+                      ),
+                      const SizedBox(height: 11),
+                      _ModeCard(
+                        icon: Icons.people,
+                        iconColor: oColor,
+                        iconBg: oSoft,
+                        title: utils.getTranslated(context, "PASS_N_PLAY"),
+                        sub: utils.getTranslated(
+                            context, "Pass_N_Play_With_your_Friend"),
+                        onTap: () => playButtonPressed(2),
+                      ),
+                      const SizedBox(height: 11),
+                      _ModeCard(
+                        icon: Icons.lock_open,
+                        iconColor: const Color(0xFF00BCD4),
+                        iconBg: const Color(0xFF00BCD4).withValues(alpha: 0.12),
+                        title: 'PRIVATE ROOM',
+                        sub: 'Create or join a room with a friend',
+                        onTap: () => _openPrivateRoom(),
+                      ),
+                      const SizedBox(height: 11),
+                      _ModeCard(
+                        icon: Icons.bolt,
+                        iconColor: const Color(0xFFFF5252),
+                        iconBg:
+                            const Color(0xFFFF5252).withValues(alpha: 0.12),
+                        title: 'BLITZ MODE',
+                        sub: '7 seconds per move — think fast!',
+                        onTap: () => _openBlitz(),
+                      ),
+                      const SizedBox(height: 11),
+                      _ModeCard(
+                        icon: Icons.local_fire_department,
+                        iconColor: const Color(0xFF66BB6A),
+                        iconBg:
+                            const Color(0xFF66BB6A).withValues(alpha: 0.12),
+                        title: 'STREAK CHALLENGE',
+                        sub: 'Beat STRIKER in a row, earn coins',
+                        onTap: () => _openStreak(),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildDailyStrip(),
+                      const SizedBox(height: 12),
+                      _buildArcadeBanner(),
+                      const SizedBox(height: 96),
+                    ]),
                   ),
                 ),
               ],
@@ -314,89 +206,326 @@ class HomeScreenActivityState extends State<HomeScreenActivity> with TickerProvi
     );
   }
 
-  Widget _buildMascotSection(Size size) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        // Glow ring beneath mascot
-        Container(
-          width: 160,
-          height: 160,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: secondarySelectedColor.withValues(alpha: 0.25),
-                blurRadius: 60,
-                spreadRadius: 20,
-              ),
-            ],
-          ),
-        ),
+  // ─── Top bar ──────────────────────────────────────────────────────────────
 
-        // Floating logo + STRIKER label
-        AnimatedBuilder(
-          animation: _floatCtrl,
-          builder: (_, child) => Transform.translate(
-            offset: Offset(0, _floatAnim.value),
-            child: child,
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              XOBattleLogo(size: 160),
-              const SizedBox(height: 18),
-              ShaderMask(
-                shaderCallback: (b) => LinearGradient(
-                  colors: [white, secondarySelectedColor],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ).createShader(b),
-                child: Text(
-                  'STRIKER',
-                  style: TextStyle(
-                    fontFamily: 'DISPLATTER',
-                    fontSize: 28,
-                    color: white,
-                    letterSpacing: 6,
-                    shadows: [Shadow(color: secondarySelectedColor.withValues(alpha: 0.8), blurRadius: 16)],
-                  ),
+  Widget _buildTopBar() {
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        child: Row(
+          children: [
+            // Wordmark
+            RichText(
+              text: TextSpan(
+                style: const TextStyle(
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w800,
+                  fontSize: 22,
+                  letterSpacing: 1.5,
                 ),
+                children: [
+                  TextSpan(text: 'X', style: TextStyle(color: xColor)),
+                  TextSpan(text: 'O', style: TextStyle(color: oColor)),
+                  TextSpan(
+                      text: ' BATTLE', style: TextStyle(color: inkColor)),
+                ],
               ),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            ),
+            const Spacer(),
+            // Coin chip
+            _CoinChip(coin: coin),
+            const SizedBox(width: 10),
+            // Profile button
+            GestureDetector(
+              onTap: () {
+                music.play(click);
+                Navigator.pushNamed(context, "/profile").then((_) {
+                  _getSavedLanguage();
+                  getSkinvalues();
+                  setState(() {});
+                });
+              },
+              child: Container(
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  gradient: LinearGradient(
-                    colors: [
-                      secondarySelectedColor.withValues(alpha: 0.2),
-                      secondarySelectedColor.withValues(alpha: 0.05),
-                    ],
-                  ),
-                  border: Border.all(
-                    color: secondarySelectedColor.withValues(alpha: 0.4),
-                    width: 1,
-                  ),
+                  color: surfaceColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: lineColor),
+                  boxShadow: [shadowSm],
                 ),
-                child: Text(
-                  'Your AI Rival  •  Beat if you can',
-                  style: TextStyle(
-                    color: secondarySelectedColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.5,
-                  ),
-                ),
+                child: Icon(Icons.person_outline_rounded,
+                    color: inkColor, size: 22),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
-  // ── Game logic helpers (unchanged) ──────────────────────────────────────
+  // ─── Hero card ────────────────────────────────────────────────────────────
+
+  Widget _buildHeroCard() {
+    final user = FirebaseAuth.instance.currentUser;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 22),
+      child: Container(
+        decoration: cardDecoration(radius: 22),
+        padding: const EdgeInsets.all(18),
+        child: Stack(
+          children: [
+            // Decorative marks
+            Positioned(
+              right: -20,
+              top: -20,
+              child: Opacity(
+                opacity: 0.06,
+                child: _XMark(size: 120, color: xColor),
+              ),
+            ),
+            Positioned(
+              right: 50,
+              bottom: -28,
+              child: Opacity(
+                opacity: 0.05,
+                child: _OMark(size: 100, color: oColor),
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _Avatar(
+                        label: (user?.displayName ?? 'Y')[0].toUpperCase()),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user?.displayName ?? 'Player',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              color: inkColor,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          _UserRankBadge(
+                              score: coin is int ? 0 : 0, size: 'sm'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                // Quick play button
+                GestureDetector(
+                  onTap: () => _showModeSheet(),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: xColor,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: xColor.withValues(alpha: 0.38),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.play_arrow_rounded,
+                            color: Colors.white, size: 22),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Quick Play',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Daily strip ──────────────────────────────────────────────────────────
+
+  Widget _buildDailyStrip() {
+    return GestureDetector(
+      onTap: () => _openDaily(),
+      child: Container(
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: lineColor),
+          boxShadow: [shadowSm],
+          gradient: LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [goldSoft, surfaceColor],
+          ),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.circular(13),
+                boxShadow: [shadowSm],
+              ),
+              child: Icon(Icons.calendar_today_rounded,
+                  color: goldColor, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Daily Challenge',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: inkColor)),
+                  const SizedBox(height: 2),
+                  RichText(
+                    text: TextSpan(
+                      style: TextStyle(
+                          fontSize: 12, color: ink2Color, fontFamily: 'Poppins'),
+                      children: [
+                        const TextSpan(text: "Solve today's puzzle · win "),
+                        TextSpan(
+                          text: '50 coins',
+                          style: TextStyle(
+                              color: goldColor, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: lineColor),
+              ),
+              child: Text('Play',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: inkColor)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Arcade banner ────────────────────────────────────────────────────────
+
+  Widget _buildArcadeBanner() {
+    return GestureDetector(
+      onTap: () {
+        music.play(click);
+        Navigator.push(context,
+            CupertinoPageRoute(builder: (_) => const ArcadeScreen()));
+      },
+      child: Container(
+        decoration: cardDecoration(radius: 22),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('Arcade',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            color: inkColor)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: xSoft,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text('6 GAMES',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: xColor,
+                              letterSpacing: 0.5)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text('RPS · Connect 4 · Checkers & more',
+                    style: TextStyle(fontSize: 12, color: ink2Color)),
+              ],
+            ),
+            const Spacer(),
+            Icon(Icons.chevron_right_rounded, color: ink3Color),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Quick-play bottom sheet ───────────────────────────────────────────────
+
+  void _showModeSheet() {
+    music.play(click);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _QuickPlaySheet(
+        onSinglePlayer: () {
+          Navigator.pop(context);
+          playButtonPressed(0);
+        },
+        onPassNPlay: () {
+          Navigator.pop(context);
+          playButtonPressed(2);
+        },
+        onRanked: () {
+          Navigator.pop(context);
+          playButtonPressed(1);
+        },
+      ),
+    );
+  }
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────
 
   void playButtonPressed(int pos) {
     music.play(click);
@@ -412,7 +541,10 @@ class HomeScreenActivityState extends State<HomeScreenActivity> with TickerProvi
 
   void _openPrivateRoom() {
     music.play(click);
-    Navigator.push(context, CupertinoPageRoute(builder: (_) => const PrivateRoomScreen()));
+    Navigator.push(
+        context,
+        CupertinoPageRoute(
+            builder: (_) => const PrivateRoomScreen()));
   }
 
   void _openBlitz() {
@@ -423,15 +555,23 @@ class HomeScreenActivityState extends State<HomeScreenActivity> with TickerProvi
 
   void _openStreak() {
     music.play(click);
-    Navigator.push(context, CupertinoPageRoute(builder: (_) => StreakModeScreen(
-      playerSkin: userSkin.isNotEmpty ? userSkin : 'cross_skin',
-      opponentSkin: opponentSkin.isNotEmpty ? opponentSkin : 'circle_skin',
-    )));
+    Navigator.push(
+        context,
+        CupertinoPageRoute(
+            builder: (_) => StreakModeScreen(
+                  playerSkin:
+                      userSkin.isNotEmpty ? userSkin : 'cross_skin',
+                  opponentSkin:
+                      opponentSkin.isNotEmpty ? opponentSkin : 'circle_skin',
+                )));
   }
 
   void _openDaily() {
     music.play(click);
-    Navigator.push(context, CupertinoPageRoute(builder: (_) => const DailyChallengeScreen()));
+    Navigator.push(
+        context,
+        CupertinoPageRoute(
+            builder: (_) => const DailyChallengeScreen()));
   }
 
   void _startMultiplayer() async {
@@ -460,88 +600,113 @@ class HomeScreenActivityState extends State<HomeScreenActivity> with TickerProvi
     int selectedLevelIndex = 0;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: primaryColor,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(20.0))),
-        title: Center(
-          child: Text(
-            utils.getTranslated(context, "selectLevel"),
-            style: Theme.of(context).textTheme.titleSmall!.copyWith(color: white),
-          ),
-        ),
-        content: SingleChildScrollView(
-          child: StatefulBuilder(
-            builder: (BuildContext context, StateSetter setDialogState) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: typeOfLevel
-                    .map((levelName) => GestureDetector(
-                          onTap: () {
-                            music.play(dice);
-                            setDialogState(() {
-                              selectedLevelIndex = typeOfLevel.indexOf(levelName);
-                            });
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8.0),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              decoration: BoxDecoration(
-                                color: selectedLevelIndex == typeOfLevel.indexOf(levelName)
-                                    ? secondarySelectedColor
-                                    : secondaryColor,
-                                borderRadius: BorderRadius.circular(10.0),
-                                border: selectedLevelIndex == typeOfLevel.indexOf(levelName)
-                                    ? null
-                                    : Border.all(color: white.withValues(alpha: 0.12)),
-                              ),
+      builder: (context) => Dialog(
+        backgroundColor: surfaceColor,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                utils.getTranslated(context, "selectLevel"),
+                style: TextStyle(
+                    color: inkColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 17),
+              ),
+              const SizedBox(height: 16),
+              StatefulBuilder(
+                builder: (BuildContext context, StateSetter setDialogState) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: typeOfLevel
+                        .map((levelName) => GestureDetector(
+                              onTap: () {
+                                music.play(dice);
+                                setDialogState(() {
+                                  selectedLevelIndex =
+                                      typeOfLevel.indexOf(levelName);
+                                });
+                              },
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                                child: Center(
-                                  child: Text(
-                                    utils.getTranslated(context, levelName),
-                                    style: Theme.of(context).textTheme.titleSmall,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 5),
+                                child: AnimatedContainer(
+                                  duration:
+                                      const Duration(milliseconds: 180),
+                                  decoration: BoxDecoration(
+                                    color: selectedLevelIndex ==
+                                            typeOfLevel.indexOf(levelName)
+                                        ? xColor
+                                        : surface2Color,
+                                    borderRadius:
+                                        BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: selectedLevelIndex ==
+                                              typeOfLevel.indexOf(levelName)
+                                          ? xColor
+                                          : lineColor,
+                                    ),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12),
+                                    child: Center(
+                                      child: Text(
+                                        utils.getTranslated(
+                                            context, levelName),
+                                        style: TextStyle(
+                                          color: selectedLevelIndex ==
+                                                  typeOfLevel
+                                                      .indexOf(levelName)
+                                              ? Colors.white
+                                              : inkColor,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ),
-                        ))
-                    .toList(),
-              );
-            },
+                            ))
+                        .toList(),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: xColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  minimumSize: const Size(double.infinity, 48),
+                  elevation: 0,
+                ),
+                onPressed: () {
+                  music.play(click);
+                  Navigator.push(
+                    context,
+                    CupertinoPageRoute(
+                      builder: (context) => SinglePlayerScreenActivity(
+                        userSkin,
+                        opponentSkin,
+                        selectedLevelIndex,
+                        "Three",
+                        timerSeconds:
+                            isBlitz ? blitzCountdown : countdowntime,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                label: Text(utils.getTranslated(context, "next")),
+              ),
+            ],
           ),
         ),
-        actions: [
-          ElevatedButton.icon(
-            style: ButtonStyle(
-              backgroundColor: WidgetStateProperty.all(secondarySelectedColor),
-              shape: WidgetStateProperty.all(const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(20.0)))),
-            ),
-            onPressed: () {
-              music.play(click);
-              Navigator.push(
-                context,
-                CupertinoPageRoute(
-                  builder: (context) => SinglePlayerScreenActivity(
-                    userSkin,
-                    opponentSkin,
-                    selectedLevelIndex,
-                    "Three",
-                    timerSeconds: isBlitz ? blitzCountdown : countdowntime,
-                  ),
-                ),
-              );
-            },
-            icon: Icon(Icons.skip_next, color: primaryColor, size: 20),
-            label: Text(
-              utils.getTranslated(context, "next"),
-              style: TextStyle(color: primaryColor, fontSize: 12),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -551,74 +716,80 @@ class HomeScreenActivityState extends State<HomeScreenActivity> with TickerProvi
     player2controller.clear();
     return showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: primaryColor,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(20.0))),
-        title: Center(
-          child: Text(
-            utils.getTranslated(context, "passNplayDialoge"),
-            style: Theme.of(context).textTheme.titleSmall!.copyWith(color: white),
+      builder: (context) => Dialog(
+        backgroundColor: surfaceColor,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                utils.getTranslated(context, "passNplayDialoge"),
+                style: TextStyle(
+                    color: inkColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 17),
+              ),
+              const SizedBox(height: 16),
+              _nameField(player1controller, userSkin),
+              const SizedBox(height: 10),
+              _nameField(player2controller, opponentSkin),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: xColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  minimumSize: const Size(double.infinity, 48),
+                  elevation: 0,
+                ),
+                onPressed: () async {
+                  music.play(click);
+                  if (player1controller.text.isNotEmpty &&
+                      player2controller.text.isNotEmpty) {
+                    Navigator.of(context).pop();
+                    Navigator.push(
+                      context,
+                      CupertinoPageRoute(
+                        builder: (context) => PassNPLay(
+                          player1controller.text,
+                          player2controller.text,
+                          userSkin,
+                          opponentSkin,
+                          "Three",
+                        ),
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                label: Text(utils.getTranslated(context, "start")),
+              ),
+            ],
           ),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _nameField(player1controller, userSkin),
-            const SizedBox(height: 10),
-            _nameField(player2controller, opponentSkin),
-          ],
-        ),
-        actions: [
-          ElevatedButton.icon(
-            style: ButtonStyle(
-                backgroundColor: WidgetStateProperty.all(secondarySelectedColor),
-                shape: WidgetStateProperty.all(const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(20.0))))),
-            onPressed: () async {
-              music.play(click);
-              if (player1controller.text.isNotEmpty && player2controller.text.isNotEmpty) {
-                Navigator.of(context).pop();
-                Navigator.push(
-                  context,
-                  CupertinoPageRoute(
-                    builder: (context) => PassNPLay(
-                      player1controller.text,
-                      player2controller.text,
-                      userSkin,
-                      opponentSkin,
-                      "Three",
-                    ),
-                  ),
-                );
-              }
-            },
-            icon: Icon(Icons.skip_next, color: primaryColor, size: 20),
-            label: Text(
-              utils.getTranslated(context, "start"),
-              style: TextStyle(color: primaryColor, fontSize: 12),
-            ),
-          ),
-        ],
       ),
     );
   }
 
   Widget _nameField(TextEditingController ctrl, String skinName) {
     return Container(
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(20), color: white),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        color: surface2Color,
+        border: Border.all(color: lineColor),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       child: TextField(
         controller: ctrl,
-        style: const TextStyle(fontSize: 14),
+        style: TextStyle(fontSize: 14, color: inkColor),
         decoration: InputDecoration(
           border: InputBorder.none,
-          prefixIcon: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: getSvgImage(imageName: skinName, height: 10, width: 10),
-          ),
           hintText: utils.getTranslated(context, "playerName"),
-          hintStyle: TextStyle(color: grey),
+          hintStyle: TextStyle(color: ink3Color),
         ),
       ),
     );
@@ -634,14 +805,16 @@ class HomeScreenActivityState extends State<HomeScreenActivity> with TickerProvi
           Dialogue.removeChild("Game", key);
           return;
         }
-        var diff = DateTime.now().difference(DateTime.parse(value["time"])).inMinutes;
+        var diff = DateTime.now()
+            .difference(DateTime.parse(value["time"]))
+            .inMinutes;
         if (diff > 15) Dialogue.removeChild("Game", key);
       });
     }
   }
 }
 
-// ── Coin chip (private, used inside HomeScreen) ────────────────────────────
+// ── Coin chip ─────────────────────────────────────────────────────────────────
 
 class _CoinChip extends StatelessWidget {
   final dynamic coin;
@@ -661,10 +834,9 @@ class _CoinChip extends StatelessWidget {
   }
 }
 
-// ── CoinWidget (public, self-loading — used by other screens) ──────────────
-
 class CoinWidget extends StatefulWidget {
   const CoinWidget({super.key});
+
   @override
   State<CoinWidget> createState() => _CoinWidgetState();
 }
@@ -693,40 +865,47 @@ class _CoinWidgetState extends State<CoinWidget> {
 
 Widget _coinPill(String label) {
   return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
     decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(20),
-      color: secondaryColor,
-      border: Border.all(color: secondarySelectedColor.withValues(alpha: 0.3), width: 1),
+      borderRadius: BorderRadius.circular(999),
+      color: goldSoft,
+      border: Border.all(color: goldColor.withValues(alpha: 0.3), width: 1),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        getSvgImage(imageName: 'coin_symbol', height: 14),
+        Icon(Icons.monetization_on_rounded, color: goldColor, size: 16),
         const SizedBox(width: 4),
-        Text(label, style: TextStyle(color: yellow, fontSize: 13, fontWeight: FontWeight.bold)),
+        Text(label,
+            style: TextStyle(
+                color: const Color(0xFF9A6516),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Poppins')),
       ],
     ),
   );
 }
 
-// ── Game mode card ─────────────────────────────────────────────────────────
+// ── Mode card ──────────────────────────────────────────────────────────────────
 
-class _GameCard extends StatelessWidget {
-  final String icon;
+class _ModeCard extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBg;
   final String title;
-  final String subtitle;
-  final Color accentColor;
-  final bool isHighlighted;
+  final String sub;
   final VoidCallback onTap;
+  final bool accent;
 
-  const _GameCard({
+  const _ModeCard({
     required this.icon,
+    required this.iconColor,
+    required this.iconBg,
     required this.title,
-    required this.subtitle,
-    required this.accentColor,
+    required this.sub,
     required this.onTap,
-    this.isHighlighted = false,
+    this.accent = false,
   });
 
   @override
@@ -734,117 +913,45 @@ class _GameCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 72,
         decoration: BoxDecoration(
+          color: accent ? xColor.withValues(alpha: 0.06) : surfaceColor,
           borderRadius: BorderRadius.circular(18),
-          gradient: isHighlighted
-              ? LinearGradient(
-                  colors: [
-                    secondarySelectedColor.withValues(alpha: 0.25),
-                    secondarySelectedColor.withValues(alpha: 0.06),
-                  ],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                )
-              : LinearGradient(
-                  colors: [
-                    white.withValues(alpha: 0.07),
-                    white.withValues(alpha: 0.03),
-                  ],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
           border: Border.all(
-            color: isHighlighted
-                ? secondarySelectedColor.withValues(alpha: 0.55)
-                : white.withValues(alpha: 0.12),
-            width: 1,
-          ),
+              color: accent ? xColor.withValues(alpha: 0.3) : lineColor),
+          boxShadow: [shadowSm],
         ),
+        padding: const EdgeInsets.all(14),
         child: Row(
           children: [
-            // Left accent bar
             Container(
-              width: 4,
-              height: 72,
+              width: 46,
+              height: 46,
               decoration: BoxDecoration(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(18),
-                  bottomLeft: Radius.circular(18),
-                ),
-                color: accentColor,
+                color: iconBg,
+                borderRadius: BorderRadius.circular(14),
               ),
+              child: Icon(icon, color: iconColor, size: 23),
             ),
-
-            // Icon
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: accentColor.withValues(alpha: 0.15),
-                ),
-                child: Center(
-                  child: getSvgImage(
-                    imageName: icon,
-                    width: 22,
-                    height: 22,
-                    imageColor: isHighlighted ? accentColor : white,
-                  ),
-                ),
-              ),
-            ),
-
-            // Text
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      letterSpacing: 0.5,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text(title,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14.5,
+                          color: inkColor)),
                   const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: white.withValues(alpha: 0.5),
-                      fontSize: 11,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text(sub,
+                      style:
+                          TextStyle(fontSize: 12, color: ink2Color),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
-
-            // Arrow
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: accentColor.withValues(alpha: 0.2),
-                ),
-                child: Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: isHighlighted ? accentColor : white.withValues(alpha: 0.7),
-                  size: 14,
-                ),
-              ),
-            ),
+            Icon(Icons.chevron_right_rounded, color: ink3Color, size: 20),
           ],
         ),
       ),
@@ -852,14 +959,325 @@ class _GameCard extends StatelessWidget {
   }
 }
 
-// ── Kept for compatibility (ChipGrid used by dialogs elsewhere) ─────────────
+// ── Section label ──────────────────────────────────────────────────────────────
+
+class _SectionLabel extends StatelessWidget {
+  final String label;
+  const _SectionLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.8,
+            color: ink3Color,
+          )),
+    );
+  }
+}
+
+// ── Avatar ────────────────────────────────────────────────────────────────────
+
+class _Avatar extends StatelessWidget {
+  final String label;
+  final double size;
+  const _Avatar({required this.label, this.size = 46});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: surface2Color,
+        borderRadius: BorderRadius.circular(size * 0.32),
+        border: Border.all(color: lineColor),
+      ),
+      child: Center(
+        child: Text(label,
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: size * 0.4,
+                color: inkColor)),
+      ),
+    );
+  }
+}
+
+// ── Rank badge (simple) ────────────────────────────────────────────────────────
+
+class _UserRankBadge extends StatelessWidget {
+  final int score;
+  final String size;
+  const _UserRankBadge({required this.score, this.size = 'md'});
+
+  static const _tiers = [
+    {'label': 'Diamond', 'min': 7000, 'color': 0xFF5C8DF6},
+    {'label': 'Platinum', 'min': 3500, 'color': 0xFF42B8B0},
+    {'label': 'Gold', 'min': 1500, 'color': 0xFFE0A92B},
+    {'label': 'Silver', 'min': 500, 'color': 0xFF9AA3B2},
+    {'label': 'Bronze', 'min': 0, 'color': 0xFFB0794B},
+  ];
+
+  Map<String, dynamic> get _tier {
+    for (final t in _tiers) {
+      if (score >= (t['min'] as int)) return t;
+    }
+    return _tiers.last;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = _tier;
+    final col = Color(t['color'] as int);
+    final small = size == 'sm';
+    return Container(
+      padding: EdgeInsets.symmetric(
+          horizontal: small ? 9 : 11, vertical: small ? 4 : 6),
+      decoration: BoxDecoration(
+        color: col.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: small ? 6 : 7,
+            height: small ? 6 : 7,
+            decoration: BoxDecoration(
+                shape: BoxShape.circle, color: col),
+          ),
+          const SizedBox(width: 5),
+          Text(t['label'] as String,
+              style: TextStyle(
+                  color: col,
+                  fontWeight: FontWeight.w700,
+                  fontSize: small ? 11 : 12.5)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── X / O decorative marks ────────────────────────────────────────────────────
+
+class _XMark extends StatelessWidget {
+  final double size;
+  final Color color;
+  const _XMark({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+        size: Size(size, size), painter: _XPainter(color: color));
+  }
+}
+
+class _XPainter extends CustomPainter {
+  final Color color;
+  _XPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = size.width * 0.12
+      ..strokeCap = StrokeCap.round;
+    final pad = size.width * 0.22;
+    canvas.drawLine(Offset(pad, pad), Offset(size.width - pad, size.height - pad), paint);
+    canvas.drawLine(Offset(size.width - pad, pad), Offset(pad, size.height - pad), paint);
+  }
+
+  @override
+  bool shouldRepaint(_XPainter old) => old.color != color;
+}
+
+class _OMark extends StatelessWidget {
+  final double size;
+  final Color color;
+  const _OMark({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+        size: Size(size, size), painter: _OPainter(color: color));
+  }
+}
+
+class _OPainter extends CustomPainter {
+  final Color color;
+  _OPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = size.width * 0.12
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawCircle(
+        Offset(size.width / 2, size.height / 2), size.width * 0.3, paint);
+  }
+
+  @override
+  bool shouldRepaint(_OPainter old) => old.color != color;
+}
+
+// ── Quick play bottom sheet ────────────────────────────────────────────────────
+
+class _QuickPlaySheet extends StatelessWidget {
+  final VoidCallback onSinglePlayer;
+  final VoidCallback onPassNPlay;
+  final VoidCallback onRanked;
+
+  const _QuickPlaySheet({
+    required this.onSinglePlayer,
+    required this.onPassNPlay,
+    required this.onRanked,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        boxShadow: [shadowLg],
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: lineColor,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text('Choose Mode',
+              style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 19,
+                  color: inkColor)),
+          const SizedBox(height: 6),
+          Text('Pick an opponent to get started',
+              style: TextStyle(fontSize: 13.5, color: ink2Color)),
+          const SizedBox(height: 20),
+          _SheetTile(
+            icon: Icons.smart_toy_outlined,
+            color: xColor,
+            bg: xSoft,
+            title: 'vs Computer',
+            sub: 'Play DORA across Easy → Hard',
+            onTap: onSinglePlayer,
+          ),
+          const SizedBox(height: 11),
+          _SheetTile(
+            icon: Icons.people_alt_outlined,
+            color: oColor,
+            bg: oSoft,
+            title: 'Pass & Play',
+            sub: 'Two players, one device',
+            onTap: onPassNPlay,
+          ),
+          const SizedBox(height: 11),
+          _SheetTile(
+            icon: Icons.public,
+            color: goldColor,
+            bg: goldSoft,
+            title: 'Online Ranked',
+            sub: 'Matchmake & earn rank points',
+            onTap: onRanked,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SheetTile extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final Color bg;
+  final String title;
+  final String sub;
+  final VoidCallback onTap;
+
+  const _SheetTile({
+    required this.icon,
+    required this.color,
+    required this.bg,
+    required this.title,
+    required this.sub,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: lineColor),
+          boxShadow: [shadowSm],
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, color: color, size: 26),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                          color: inkColor)),
+                  const SizedBox(height: 2),
+                  Text(sub,
+                      style: TextStyle(fontSize: 13, color: ink2Color)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: ink3Color, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Chip grid (kept for compatibility with dialogs) ───────────────────────────
 
 class ChipGrid extends StatefulWidget {
   final List list;
   final Function(int i) onChange;
   final bool avatar;
 
-  const ChipGrid({super.key, required this.list, required this.onChange, required this.avatar});
+  const ChipGrid(
+      {super.key,
+      required this.list,
+      required this.onChange,
+      required this.avatar});
 
   @override
   _ChipGridState createState() => _ChipGridState();
@@ -886,7 +1304,9 @@ class _ChipGridState extends State<ChipGrid> {
           return GestureDetector(
             onTap: () async {
               music.play(dice);
-              setState(() { selectedIndex = i; });
+              setState(() {
+                selectedIndex = i;
+              });
               if (widget.avatar == false) {
                 widget.onChange(selectedIndex);
               } else {
@@ -894,13 +1314,18 @@ class _ChipGridState extends State<ChipGrid> {
               }
             },
             child: Chip(
-              backgroundColor: selectedIndex == i ? secondarySelectedColor : secondaryColor,
+              backgroundColor:
+                  selectedIndex == i ? xColor : surface2Color,
+              side: BorderSide(color: lineColor),
               label: Padding(
-                padding: EdgeInsets.symmetric(horizontal: widget.avatar ? 0 : 8.0),
+                padding:
+                    EdgeInsets.symmetric(horizontal: widget.avatar ? 0 : 8.0),
                 child: Text(widget.list[i].toString(),
-                    style: Theme.of(context).textTheme.titleSmall),
+                    style: TextStyle(
+                        color:
+                            selectedIndex == i ? Colors.white : inkColor,
+                        fontWeight: FontWeight.w600)),
               ),
-              avatar: widget.avatar ? getSvgImage(imageName: 'coin_symbol') : null,
             ),
           );
         },

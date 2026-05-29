@@ -323,43 +323,63 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
           music.play(click);
         },
         child: Scaffold(
-            body: Container(
-                decoration: utils.gradBack(),
+            backgroundColor: bgColor,
+            body: SafeArea(
                 child: Column(
                   children: [
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: Row(children: [
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            width: 42, height: 42,
+                            decoration: BoxDecoration(
+                              color: surfaceColor, borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: lineColor), boxShadow: [shadowSm],
+                            ),
+                            child: Icon(Icons.arrow_back_rounded, color: inkColor, size: 20),
+                          ),
+                        ),
+                        const Spacer(),
+                        Text('RANKED MATCH', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: inkColor, letterSpacing: 1.5)),
+                        const Spacer(),
+                        const SizedBox(width: 42),
+                      ]),
+                    ),
                     //find opponent image
-                    Container(
-                        height: MediaQuery.of(context).size.height * 0.5,
+                    Expanded(
+                        flex: 5,
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.end,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Container(
-                              width: 123,
-                              height: 123,
+                              width: 120,
+                              height: 120,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 boxShadow: [BoxShadow(
-                                  color: secondarySelectedColor.withValues(alpha: img == "dora_oppentfind" ? 0.5 : 0.2),
+                                  color: xColor.withValues(alpha: img == "dora_oppentfind" ? 0.25 : 0.10),
                                   blurRadius: 30, spreadRadius: 6,
                                 )],
                               ),
-                              child: const XOBattleLogo(size: 123),
+                              child: const XOBattleLogo(size: 120),
                             ),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 18.0),
-                              child: Text(oppMsg),
-                            ),
+                            const SizedBox(height: 16),
+                            Text(oppMsg, style: TextStyle(color: ink2Color, fontSize: 14)),
                           ],
                         )),
 
-                    Column(
+                    Expanded(
+                      flex: 5,
+                      child: Column(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        SizedBox(
-                          height: MediaQuery.of(context).size.height * 0.1,
-                        ),
                         //players profile pic
-                        Row(
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
                             Expanded(
@@ -371,31 +391,25 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                                       width: 80.0,
                                       decoration: BoxDecoration(
                                           shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: white,
-                                          )),
+                                          border: Border.all(color: xSoft2, width: 2.5),
+                                          color: surface2Color),
                                       child: Padding(
-                                          padding: const EdgeInsets.all(5.0),
+                                          padding: const EdgeInsets.all(4.0),
                                           child: CircleAvatar(
                                               radius: 50,
-                                              backgroundColor: secondaryColor,
+                                              backgroundColor: surface2Color,
                                               backgroundImage:
                                                   _profilePic == null
                                                       ? null
                                                       : NetworkImage(
                                                           _profilePic!)))),
-                                  SizedBox(
-                                    height: 5,
-                                  ),
                                 ],
                               ),
                             ),
                             Expanded(
                               flex: 2,
-                              child: getSvgImage(
-                                imageName: "vs_iconbig",
-                                width: 48,
-                                height: 47,
+                              child: Center(
+                                child: Text('VS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: ink3Color, letterSpacing: 2)),
                               ),
                             ),
                             Expanded(
@@ -407,14 +421,13 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                                       width: 80.0,
                                       decoration: BoxDecoration(
                                           shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: white,
-                                          )),
+                                          border: Border.all(color: oSoft2, width: 2.5),
+                                          color: surface2Color),
                                       child: Padding(
-                                        padding: const EdgeInsets.all(5.0),
+                                        padding: const EdgeInsets.all(4.0),
                                         child: CircleAvatar(
                                             radius: 50,
-                                            backgroundColor: secondaryColor,
+                                            backgroundColor: surface2Color,
                                             backgroundImage: oppositPlayerName
                                                             .value !=
                                                         "" &&
@@ -429,14 +442,16 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                                                     child: Text(
                                                     "?",
                                                     style: TextStyle(
-                                                        fontSize: 30,
-                                                        color: primaryColor),
+                                                        fontSize: 28,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: ink3Color),
                                                   ))),
                                       ),
                                     ),
                                   ],
                                 )),
                           ],
+                        ),
                         ),
                         //players name
                         Row(
@@ -449,7 +464,7 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                                       left: 10.0, top: 10.0),
                                   child: Text(
                                     "$_displayName \n",
-                                    style: TextStyle(color: white),
+                                    style: TextStyle(color: inkColor, fontWeight: FontWeight.w600),
                                     textAlign: TextAlign.center,
                                     maxLines: 2,
                                     softWrap: true,
@@ -469,7 +484,7 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                                           canUpdateUi == true
                                       ? "${oppositPlayerName.value} \n"
                                       : "$opponentPlayerName \n",
-                                  style: TextStyle(color: white),
+                                  style: TextStyle(color: inkColor, fontWeight: FontWeight.w600),
                                   textAlign: TextAlign.center,
                                   maxLines: 2,
                                   softWrap: true,
@@ -480,36 +495,38 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                           ],
                         ),
 
-                        SizedBox(
-                          height: MediaQuery.of(context).size.height * 0.1,
-                        ),
-                        CupertinoButton(
-                            padding: EdgeInsets.zero,
+                        const SizedBox(height: 8),
+                        GestureDetector(
                             child: Container(
-                                padding: EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 5),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 20, vertical: 12),
                                 decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(20),
-                                    color: secondarySelectedColor),
+                                    borderRadius: BorderRadius.circular(14),
+                                    color: btnTxtKey == "tryAgain" ? xColor : surfaceColor,
+                                    border: Border.all(color: btnTxtKey == "tryAgain" ? xColor : lineColor),
+                                    boxShadow: [shadowSm]),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
                                       btnTxtKey == "tryAgain"
                                           ? Icons.replay_circle_filled
-                                          : Icons.cancel,
-                                      color: primaryColor,
+                                          : Icons.cancel_outlined,
+                                      color: btnTxtKey == "tryAgain" ? Colors.white : red,
+                                      size: 18,
                                     ),
+                                    const SizedBox(width: 8),
                                     Text(
                                       utils.getTranslated(context, btnTxtKey),
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall!
-                                          .copyWith(color: primaryColor),
+                                      style: TextStyle(
+                                        color: btnTxtKey == "tryAgain" ? Colors.white : red,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
                                     ),
                                   ],
                                 )),
-                            onPressed: () async {
+                            onTap: () async {
                               if (btnTxtKey == "tryAgain") {
                                 setState(() {
                                   oppMsg = utils.getTranslated(
@@ -551,8 +568,10 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                                 if (mounted) Navigator.pop(context);
                               }
                             }),
+                        const SizedBox(height: 20),
                       ],
                     ),
+                  ),
                   ],
                 ))));
   }

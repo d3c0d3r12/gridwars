@@ -182,9 +182,9 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
     final won = myScore > oppScore;
     final draw = myScore == oppScore;
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
-      backgroundColor: secondaryColor,
+      backgroundColor: surfaceColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
-      title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: white, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+      title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
       content: Text('$myScore — $oppScore boxes', style: TextStyle(color: secondarySelectedColor, fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
       actions: [TextButton(onPressed: () {
         if (Navigator.canPop(context)) Navigator.pop(context);
@@ -203,7 +203,7 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
         onPopInvokedWithResult: (didPop, _) { if (!didPop && !_disposed) _handleExit(); },
         child: Scaffold(
           body: Container(
-            decoration: utils.gradBack(),
+            color: bgColor,
             child: SafeArea(child: Column(children: [
               gameHeader(context, 'DOTS & BOXES', _myTurn ? 'Your Turn' : "${widget.args.oppName}'s Turn", myScore, oppScore, onExit: _handleExit),
               const SizedBox(height: 6),
@@ -241,8 +241,7 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
               ),
             ])),
           ),
-        )),
-    );
+        ));
   }
 
   void _handleTap(Offset pos, double sz) {

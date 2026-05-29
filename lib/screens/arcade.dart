@@ -3,84 +3,227 @@ import 'package:flutter/material.dart';
 
 import '../helpers/color.dart';
 import '../helpers/constant.dart';
+import '../helpers/utils.dart';
 import '../screens/splash.dart';
 import 'arcade_lobby.dart';
+import 'home_screen.dart';
 
 class _GameMeta {
-  final String type, name, emoji, desc;
+  final String type, name, desc;
+  final IconData icon;
   final Color accent;
-  const _GameMeta(this.type, this.name, this.emoji, this.desc, this.accent);
+  const _GameMeta(this.type, this.name, this.desc, this.icon, this.accent);
 }
 
 const _games = [
-  _GameMeta('rps',        'Rock Paper\nScissors', '✊',  'Best of 5 — pick fast!',          Color(0xFFE91E63)),
-  _GameMeta('connect4',   'Connect 4',            '🔴',  'Drop pieces, align 4 to win',      Color(0xFFFF5722)),
-  _GameMeta('gomoku',     'Gomoku',               '⚫',  '5 in a row on 11×11 grid',         Color(0xFF9C27B0)),
-  _GameMeta('dotsboxes',  'Dots & Boxes',         '🟦',  'Draw lines, claim boxes',           Color(0xFF2196F3)),
-  _GameMeta('checkers',   'Checkers',             '♟️',  'Classic draughts battle',           Color(0xFF4CAF50)),
-  _GameMeta('battleship', 'Battleship',           '🚢',  'Place ships, fire torpedoes',       Color(0xFF00BCD4)),
+  _GameMeta('rps', 'Rock Paper\nScissors', 'Best of 5 — pick fast!',
+      Icons.sports_mma, Color(0xFFE53935)),
+  _GameMeta('connect4', 'Connect 4', 'Drop pieces, align 4 to win',
+      Icons.grid_on, Color(0xFFFF7043)),
+  _GameMeta('gomoku', 'Gomoku', '5 in a row on 11×11 grid',
+      Icons.circle_outlined, Color(0xFF7B1FA2)),
+  _GameMeta('dotsboxes', 'Dots & Boxes', 'Draw lines, claim boxes',
+      Icons.grid_3x3, Color(0xFF1565C0)),
+  _GameMeta('checkers', 'Checkers', 'Classic draughts battle',
+      Icons.apps, Color(0xFF2E7D32)),
+  _GameMeta('battleship', 'Battleship', 'Place ships, fire torpedoes',
+      Icons.sailing, Color(0xFF00838F)),
 ];
 
-class ArcadeScreen extends StatelessWidget {
+class ArcadeScreen extends StatefulWidget {
   const ArcadeScreen({super.key});
+
+  @override
+  State<ArcadeScreen> createState() => _ArcadeScreenState();
+}
+
+class _ArcadeScreenState extends State<ArcadeScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animCtrl;
+  late Animation<double> _fadeAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _animCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 500));
+    _fadeAnim =
+        CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
+    _animCtrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: utils.gradBack(),
-        child: SafeArea(child: Column(children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
-            child: Row(children: [
-              IconButton(icon: Icon(Icons.arrow_back, color: white), onPressed: () => Navigator.pop(context)),
-              const Spacer(),
-              Column(children: [
-                Text('ARCADE', style: TextStyle(color: white, fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 3, fontFamily: 'DISPLATTER')),
-                Text('6 Multiplayer Games', style: TextStyle(color: secondarySelectedColor, fontSize: 11)),
-              ]),
-              const Spacer(),
-              // Entry fee chip
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: secondarySelectedColor.withValues(alpha: 0.15),
-                  border: Border.all(color: secondarySelectedColor.withValues(alpha: 0.4)),
+      backgroundColor: bgColor,
+      body: FadeTransition(
+        opacity: _fadeAnim,
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        music.play(click);
+                        Navigator.pop(context);
+                      },
+                      child: Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: surfaceColor,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: lineColor),
+                          boxShadow: [shadowSm],
+                        ),
+                        child: Icon(Icons.arrow_back_rounded,
+                            color: inkColor, size: 20),
+                      ),
+                    ),
+                    const Spacer(),
+                    Column(
+                      children: [
+                        Text('ARCADE',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                                color: inkColor,
+                                letterSpacing: 2.5)),
+                        Text('6 multiplayer games',
+                            style: TextStyle(
+                                color: ink3Color,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                    const Spacer(),
+                    CoinWidget(),
+                  ],
                 ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  getSvgImage(imageName: 'coin_symbol', height: 12),
-                  Text(' $fixedEntryFee', style: TextStyle(color: yellow, fontWeight: FontWeight.bold, fontSize: 12)),
-                ]),
               ),
-            ]),
-          ),
 
-          const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(children: [
-              Container(width: 3, height: 16, color: secondarySelectedColor, margin: const EdgeInsets.only(right: 8)),
-              Text('Choose a game to play online', style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 12)),
-            ]),
-          ),
-
-          const SizedBox(height: 12),
-
-          // Game grid
-          Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.85,
+              // Banner strip
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: surfaceColor,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: xSoft),
+                    boxShadow: [shadowSm],
+                    gradient: LinearGradient(
+                      colors: [xSoft, surfaceColor],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: surfaceColor,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [shadowSm],
+                        ),
+                        child: Icon(Icons.public_rounded,
+                            color: xColor, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Play online for coins',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                    color: inkColor)),
+                            Text('Win matches to climb & earn rewards',
+                                style: TextStyle(
+                                    fontSize: 11.5, color: ink2Color)),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: goldSoft,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                              color: goldColor.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.monetization_on_rounded,
+                                color: goldColor, size: 14),
+                            const SizedBox(width: 4),
+                            Text('$fixedEntryFee',
+                                style: TextStyle(
+                                    color: const Color(0xFF9A6516),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              itemCount: _games.length,
-              itemBuilder: (_, i) => _GameCard(game: _games[i]),
-            ),
+
+              const SizedBox(height: 14),
+
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('CHOOSE A GAME',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.8,
+                          color: ink3Color)),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // Game grid
+              Expanded(
+                child: GridView.builder(
+                  padding:
+                      const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 0.88,
+                  ),
+                  itemCount: _games.length,
+                  itemBuilder: (_, i) => _GameCard(game: _games[i]),
+                ),
+              ),
+            ],
           ),
-        ])),
+        ),
       ),
     );
   }
@@ -93,61 +236,87 @@ class _GameCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.push(context, CupertinoPageRoute(
-        builder: (_) => ArcadeLobbyScreen(gameType: game.type, gameName: game.name.replaceAll('\n', ' '), accent: game.accent),
-      )),
+      onTap: () {
+        music.play(click);
+        Navigator.push(
+          context,
+          CupertinoPageRoute(
+            builder: (_) => ArcadeLobbyScreen(
+              gameType: game.type,
+              gameName: game.name,
+              accent: game.accent,
+            ),
+          ),
+        );
+      },
       child: Container(
         decoration: BoxDecoration(
+          color: surfaceColor,
           borderRadius: BorderRadius.circular(20),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              game.accent.withValues(alpha: 0.18),
-              game.accent.withValues(alpha: 0.06),
-            ],
-          ),
-          border: Border.all(color: game.accent.withValues(alpha: 0.4), width: 1.2),
+          border: Border.all(color: lineColor),
+          boxShadow: [shadowSm],
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Emoji icon in circle
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: game.accent.withValues(alpha: 0.2),
+        padding: const EdgeInsets.all(15),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Icon box
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: game.accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Icon(game.icon, color: game.accent, size: 26),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              game.name,
+              style: TextStyle(
+                  color: inkColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  height: 1.2),
+            ),
+            const SizedBox(height: 5),
+            Expanded(
+              child: Text(
+                game.desc,
+                style:
+                    TextStyle(color: ink2Color, fontSize: 11.5, height: 1.4),
+              ),
+            ),
+            // Bottom row: coin + play
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.monetization_on_rounded,
+                        color: goldColor, size: 15),
+                    const SizedBox(width: 3),
+                    Text('$fixedEntryFee',
+                        style: TextStyle(
+                            color: const Color(0xFF9A6516),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            fontFamily: 'Poppins')),
+                  ],
                 ),
-                child: Center(child: Text(game.emoji, style: const TextStyle(fontSize: 26))),
-              ),
-              const SizedBox(height: 12),
-              Text(game.name, style: TextStyle(color: white, fontWeight: FontWeight.bold, fontSize: 14, height: 1.2)),
-              const SizedBox(height: 6),
-              Expanded(
-                child: Text(game.desc, style: TextStyle(color: white.withValues(alpha: 0.55), fontSize: 11, height: 1.4)),
-              ),
-              const SizedBox(height: 10),
-              // Play button
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  color: game.accent.withValues(alpha: 0.25),
-                  border: Border.all(color: game.accent.withValues(alpha: 0.5)),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: game.accent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.play_arrow_rounded,
+                      color: game.accent, size: 18),
                 ),
-                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(Icons.play_arrow_rounded, color: game.accent, size: 16),
-                  const SizedBox(width: 4),
-                  Text('PLAY', style: TextStyle(color: game.accent, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
-                ]),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ),
       ),
     );

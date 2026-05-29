@@ -277,10 +277,10 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
             borderRadius: BorderRadius.circular(20),
             side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4), width: 1.5),
           ),
-          title: Text('Double Down?', style: TextStyle(color: white, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+          title: Text('Double Down?', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
           content: Text(
             'Opponent wants to double the stake!\nWinner gets 4× the entry fee.',
-            style: TextStyle(color: white.withValues(alpha: 0.8)),
+            style: TextStyle(color: ink2Color),
             textAlign: TextAlign.center,
           ),
           actions: [
@@ -305,7 +305,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                 _doubleDialogShowing = false;
                 await _ins.ref().child("Game").child(widget.gameKey).update({"doubleRequest": null});
               },
-              child: Text('Decline', style: TextStyle(color: white.withValues(alpha: 0.5))),
+              child: Text('Decline', style: TextStyle(color: ink2Color)),
             ),
           ],
         ),
@@ -1015,7 +1015,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
               }
             },
             child: AlertDialog(
-                backgroundColor: primaryColor,
+                backgroundColor: bgColor,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.all(Radius.circular(20.0))),
                 title: Text(utils.getTranslated(context, "nextRound"),
@@ -1172,7 +1172,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
     return PopScope(
       canPop: false,
       child: Container(
-        decoration: utils.gradBack(),
+        color: bgColor,
         child: Column(
           children: [
             Padding(
@@ -1199,7 +1199,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                             child: Text(
                               '$secs',
                               style: TextStyle(
-                                color: secs <= 10 ? Colors.red : white,
+                                color: secs <= 10 ? Colors.red : inkColor,
                                 fontSize: 9,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -1230,12 +1230,12 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                         margin: const EdgeInsets.only(right: 4),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(10),
-                          gradient: LinearGradient(colors: [secondarySelectedColor, const Color(0xFFFF8800)]),
+                          color: xColor,
                         ),
                         child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          Text('2×', style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text('2×', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                           const SizedBox(width: 3),
-                          Icon(Icons.bolt_rounded, color: primaryColor, size: 14),
+                          Icon(Icons.bolt_rounded, color: Colors.white, size: 14),
                         ]),
                       ),
                     ),
@@ -1248,7 +1248,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                               return Alert(
                                 title: Text(
                                   utils.getTranslated(context, "aleart"),
-                                  style: TextStyle(color: white),
+                                  style: TextStyle(color: inkColor),
                                 ),
                                 isMultipleAction: true,
                                 defaultActionButtonName:
@@ -1347,7 +1347,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                     style: Theme.of(context)
                         .textTheme
                         .headlineSmall!
-                        .copyWith(color: white, fontWeight: FontWeight.bold),
+                        .copyWith(color: inkColor, fontWeight: FontWeight.bold),
                   ),
                 )),
             Expanded(
@@ -1448,7 +1448,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodySmall!
-                                        .copyWith(color: white),
+                                        .copyWith(color: inkColor),
                                     overflow: TextOverflow.ellipsis,
                                     softWrap: true,
                                   ),
@@ -1464,7 +1464,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodySmall!
-                                    .copyWith(color: white),
+                                    .copyWith(color: inkColor),
                                 overflow: TextOverflow.ellipsis,
                                 softWrap: true,
                               ),
@@ -1475,7 +1475,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodySmall!
-                                    .copyWith(color: white),
+                                    .copyWith(color: inkColor),
                                 overflow: TextOverflow.ellipsis,
                                 softWrap: true,
                               ),
@@ -1494,7 +1494,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                             style: Theme.of(context)
                                 .textTheme
                                 .bodySmall!
-                                .copyWith(color: white),
+                                .copyWith(color: inkColor),
                             overflow: TextOverflow.ellipsis,
                             softWrap: true,
                           ),
@@ -1517,7 +1517,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodySmall!
-                                      .copyWith(color: white),
+                                      .copyWith(color: inkColor),
                                   overflow: TextOverflow.ellipsis,
                                   softWrap: true,
                                 ),
@@ -1528,7 +1528,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall!
-                                  .copyWith(color: white),
+                                  .copyWith(color: inkColor),
                               overflow: TextOverflow.ellipsis,
                               softWrap: true,
                             ),
@@ -1539,7 +1539,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall!
-                                  .copyWith(color: white),
+                                  .copyWith(color: inkColor),
                               overflow: TextOverflow.ellipsis,
                               softWrap: true,
                             ),

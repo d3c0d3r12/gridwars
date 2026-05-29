@@ -23,7 +23,6 @@ import '../widgets/alert_dialogue.dart';
 import 'game_history.dart';
 import 'how_to_play.dart';
 import 'login_with_email.dart';
-// more_games_listing removed - not needed
 import 'privacy_policy.dart';
 import 'splash.dart';
 
@@ -32,7 +31,8 @@ class Profile extends StatefulWidget {
   _ProfileBodyState createState() => _ProfileBodyState();
 }
 
-class _ProfileBodyState extends State<Profile> {
+class _ProfileBodyState extends State<Profile>
+    with SingleTickerProviderStateMixin {
   int? coin = 0;
   int? matchPlayedCount = 0;
   int? score = 0;
@@ -52,435 +52,445 @@ class _ProfileBodyState extends State<Profile> {
   bool isLoading = false;
   final _nameFieldKey = GlobalKey<FormFieldState>();
 
+  late AnimationController _animCtrl;
+  late Animation<double> _fadeAnim;
+
   @override
   void initState() {
     super.initState();
-    if (Platform.isAndroid) {
-      platform = "Android";
-    }
-    if (Platform.isIOS) {
-      platform = "IOS";
-    }
+    if (Platform.isAndroid) platform = "Android";
+    if (Platform.isIOS) platform = "IOS";
+
+    _animCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 500));
+    _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
+    _animCtrl.forward();
+
     getSound();
-    getFieldValue(
-      "matchplayed",
-      (e) => matchPlayedCount = e,
-      (e) => matchPlayedCount = e,
-    );
-    getFieldValue("coin", (e) => coin = e, (e) => coin = e);
-    getFieldValue("score", (e) => score = e, (e) => score = e);
-    getFieldValue("matchwon", (e) => matchWon = e, (e) => matchWon = e);
-    getFieldValue("profilePic", (e) => profilePic = e, (e) => profilePic = e);
-    getFieldValue("username", (e) => username = e, (e) => username = e);
+    _loadFields();
 
     Future.delayed(Duration.zero, () {
       _getLanguageList();
-
       _getSavedLanguage();
     });
   }
 
-  getFieldValue(
-    String fieldName,
-    void Function(dynamic count) callback,
-    void Function(dynamic count) update,
-  ) async {
-    var init;
-    try {
-      var ins = GetUserInfo();
-      init = await ins.getFieldValue(fieldName);
-      if (mounted) {
-        setState(() {
-          callback(init);
-        });
-      }
+  void _loadFields() {
+    _getField("matchplayed", (e) => matchPlayedCount = e);
+    _getField("coin", (e) => coin = e);
+    _getField("score", (e) => score = e);
+    _getField("matchwon", (e) => matchWon = e);
+    _getField("profilePic", (e) => profilePic = e);
+    _getField("username", (e) => username = e);
+  }
 
-      ins.detectChange(fieldName, (val) {
-        if (mounted) {
-          if (isLoading) {
-            isLoading = false;
-          }
-          setState(() {
-            update(val);
-          });
-        }
+  void _getField(String field, void Function(dynamic) cb) async {
+    try {
+      final ins = GetUserInfo();
+      final init = await ins.getFieldValue(field);
+      if (mounted) setState(() => cb(init));
+      ins.detectChange(field, (val) {
+        if (mounted) setState(() { isLoading = false; cb(val); });
       });
-    } catch (err) {}
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    _animCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _openStoreListing() => _inAppReview.openStoreListing(
-        appStoreId: appStoreId,
-        microsoftStoreId: 'microsoftStoreId',
-      );
+  Future<void> _openStoreListing() =>
+      _inAppReview.openStoreListing(appStoreId: appStoreId);
 
   @override
   Widget build(BuildContext context) {
     _getLanguageList();
-    var height = MediaQuery.of(context).padding.top;
     return PopScope(
       canPop: true,
-      onPopInvokedWithResult: (didPop, result) {
-        music.play(click);
-      },
+      onPopInvokedWithResult: (didPop, result) => music.play(click),
       child: Scaffold(
-        body: Stack(
-          children: [
-            Column(
-              children: [
-                Stack(
+        backgroundColor: bgColor,
+        body: isLoading
+            ? Center(
+                child: CircularProgressIndicator(
+                    color: xColor, strokeWidth: 2.5))
+            : FadeTransition(
+                opacity: _fadeAnim,
+                child: ListView(
                   children: [
-                    Container(
-                      height: MediaQuery.of(context).size.height / 4.5,
-                      decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                secondaryColor,
-                                primaryColor,
-                              ]),
-                          borderRadius: const BorderRadius.only(
-                              bottomLeft: Radius.circular(40),
-                              bottomRight: Radius.circular(40))),
-                    ),
-                    Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            margin: EdgeInsets.only(top: height + 10),
-                            child: Text("${utils.limitChar(username)}",
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleLarge!
-                                    .copyWith(
-                                        color: white,
-                                        fontWeight: FontWeight.bold)),
-                          ),
-                          Text(
-                              _auth.currentUser!.email == null
-                                  ? ""
-                                  : "${_auth.currentUser!.email}",
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall!
-                                  .copyWith(color: white)),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              getSvgImage(imageName: 'coin_symbol', height: 15),
-                              Text(
-                                "  $coin",
-                                style: TextStyle(color: white),
-                              )
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          _RankBadge(score: score ?? 0),
-                        ],
-                      ),
-                    ),
-                    Positioned.directional(
-                        textDirection: Directionality.of(context),
-                        top: height + 3,
-                        start: 3,
-                        child: IconButton(
-                          onPressed: () {
-                            music.play(click);
-                            Navigator.pop(context);
+                    _buildTopBar(),
+                    _buildProfileCard(),
+                    _buildStatCards(),
+                    const SizedBox(height: 24),
+                    _buildSection('Sound & Feel', [
+                      _SettingsRow(
+                        icon: Icons.volume_up_rounded,
+                        iconColor: xColor,
+                        title: 'Sound Effects',
+                        trailing: _Toggle(
+                          on: sound,
+                          onChange: (v) async {
+                            changeValue(v);
+                            setState(() => sound = v);
+                            if (v) {
+                              if (Music.status != 'playing') {
+                                await music.play(backMusic);
+                              }
+                            } else {
+                              if (Music.status == 'playing') {
+                                await music.stop();
+                              }
+                            }
                           },
-                          icon: Icon(
-                            Icons.arrow_back,
-                            color: white,
-                            size: 25,
-                          ),
-                        )),
-                    Container(
-                      margin: EdgeInsets.only(
-                          top: MediaQuery.of(context).size.height * .22 - 55),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "$matchPlayedCount",
-                                  style: TextStyle(color: white),
-                                ),
-                                Text(
-                                  utils.getTranslated(context, "matchPlayed"),
-                                ),
-                              ],
-                            ),
-                            flex: 1,
-                          ),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  "$matchWon",
-                                  style: TextStyle(color: white),
-                                ),
-                                Text(
-                                  utils.getTranslated(context, "matchWonLbl"),
-                                ),
-                              ],
-                            ),
-                            flex: 1,
-                          )
-                        ],
+                        ),
                       ),
+                    ]),
+                    _buildSection('Account', [
+                      if (!_auth.currentUser!.isAnonymous) ...[
+                        _SettingsRow(
+                          icon: Icons.history_rounded,
+                          iconColor: const Color(0xFF42B8B0),
+                          title: utils.getTranslated(context, "history"),
+                          onTap: () async {
+                            music.play(click);
+                            try {
+                              await InternetAddress.lookup('google.com');
+                              Navigator.of(context).push(CupertinoPageRoute(
+                                  builder: (_) => GameHistory()));
+                            } on SocketException {
+                              Dialogue().error(context);
+                            }
+                          },
+                        ),
+                        _SettingsRow(
+                          icon: Icons.shopping_bag_rounded,
+                          iconColor: goldColor,
+                          title: utils.getTranslated(context, "shop"),
+                          onTap: () async {
+                            music.play(click);
+                            try {
+                              await InternetAddress.lookup('google.com');
+                              Navigator.pushNamed(context, "/shop");
+                            } on SocketException {
+                              Dialogue().error(context);
+                            }
+                          },
+                        ),
+                        _SettingsRow(
+                          icon: Icons.style_rounded,
+                          iconColor: xColor,
+                          title: utils.getTranslated(context, "skin"),
+                          onTap: () async {
+                            music.play(click);
+                            try {
+                              await InternetAddress.lookup('google.com');
+                              Navigator.pushNamed(context, "/skin");
+                            } on SocketException {
+                              Dialogue().error(context);
+                            }
+                          },
+                        ),
+                      ] else
+                        _SettingsRow(
+                          icon: Icons.login_rounded,
+                          iconColor: goodColor,
+                          title: utils.getTranslated(context, "signInNow"),
+                          onTap: () {
+                            music.play(click);
+                            Navigator.push(
+                                context,
+                                CupertinoPageRoute(
+                                    builder: (_) => LoginWithEmail()));
+                          },
+                        ),
+                    ]),
+                    _buildSection('Appearance', [
+                      _SettingsRow(
+                        icon: Icons.language_rounded,
+                        iconColor: ink2Color,
+                        title: utils.getTranslated(context, "changeLanguage"),
+                        onTap: () => openChangeLanguageBottomSheet(),
+                      ),
+                    ]),
+                    _buildSection('More', [
+                      _SettingsRow(
+                        icon: Icons.help_outline_rounded,
+                        iconColor: ink2Color,
+                        title: utils.getTranslated(context, "howToPlayHeading"),
+                        onTap: () {
+                          music.play(click);
+                          Navigator.push(context,
+                              CupertinoPageRoute(builder: (_) => HowToPlay()));
+                        },
+                      ),
+                      _SettingsRow(
+                        icon: Icons.star_outline_rounded,
+                        iconColor: goldColor,
+                        title: utils.getTranslated(context, "rate"),
+                        onTap: () => _openStoreListing(),
+                      ),
+                      _SettingsRow(
+                        icon: Icons.share_rounded,
+                        iconColor: xColor,
+                        title: utils.getTranslated(context, "share"),
+                        onTap: () {
+                          final str =
+                              "$appName\n\n$appFind$androidLink$packageName\n\n iOS:\n$iosLink$iosPackage";
+                          SharePlus.instance.share(ShareParams(text: str));
+                        },
+                      ),
+                      _SettingsRow(
+                        icon: Icons.info_outline_rounded,
+                        iconColor: ink2Color,
+                        title: utils.getTranslated(context, "aboutUs"),
+                        onTap: () {
+                          music.play(click);
+                          Navigator.push(
+                              context,
+                              CupertinoPageRoute(
+                                  builder: (_) => PrivacyPolicy(
+                                      title: utils.getTranslated(
+                                          context, "aboutUs"))));
+                        },
+                      ),
+                      _SettingsRow(
+                        icon: Icons.contact_support_outlined,
+                        iconColor: ink2Color,
+                        title: utils.getTranslated(context, "contactUs"),
+                        onTap: () {
+                          Navigator.push(
+                              context,
+                              CupertinoPageRoute(
+                                  builder: (_) => PrivacyPolicy(
+                                      title: utils.getTranslated(
+                                          context, "contactUs"))));
+                        },
+                      ),
+                      _SettingsRow(
+                        icon: Icons.description_outlined,
+                        iconColor: ink2Color,
+                        title: utils.getTranslated(context, "termCond"),
+                        onTap: () {
+                          music.play(click);
+                          Navigator.push(
+                              context,
+                              CupertinoPageRoute(
+                                  builder: (_) => PrivacyPolicy(
+                                      title: utils.getTranslated(
+                                          context, "termCond"))));
+                        },
+                      ),
+                      _SettingsRow(
+                        icon: Icons.shield_outlined,
+                        iconColor: goodColor,
+                        title: utils.getTranslated(context, "privacy"),
+                        isLast: true,
+                        onTap: () {
+                          music.play(click);
+                          Navigator.push(
+                              context,
+                              CupertinoPageRoute(
+                                  builder: (_) => PrivacyPolicy(
+                                      title: utils.getTranslated(
+                                          context, "privacy"))));
+                        },
+                      ),
+                    ]),
+                    _buildSection('Danger Zone', [
+                      _SettingsRow(
+                        icon: Icons.logout_rounded,
+                        iconColor: red,
+                        title: utils.getTranslated(context, "logout"),
+                        onTap: () => _confirmLogout(),
+                      ),
+                      _SettingsRow(
+                        icon: Icons.delete_outline_rounded,
+                        iconColor: red,
+                        title: utils.getTranslated(context, "deleteAccount"),
+                        isLast: true,
+                        onTap: () => deleteAccount(context),
+                      ),
+                    ]),
+                    const SizedBox(height: 16),
+                    Center(
+                      child: Text('XO Battle · v1.1.3',
+                          style:
+                              TextStyle(fontSize: 12, color: ink3Color)),
                     ),
+                    const SizedBox(height: 40),
                   ],
                 ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: ListView(
-                      physics: const ScrollPhysics(),
-                      shrinkWrap: true,
-                      children: [
-                        Align(
-                          alignment: Alignment.center,
-                          child: Container(
-                            // margin: EdgeInsets.only(top: 10),
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                                color: white,
-                                borderRadius: const BorderRadius.all(
-                                    Radius.circular(20))),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                InkWell(
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 5),
-                                    decoration: BoxDecoration(
-                                        color: sound ? primaryColor : white,
-                                        borderRadius: const BorderRadius.all(
-                                            Radius.circular(20))),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        getSvgImage(
-                                            imageName: 'soundon_dark',
-                                            imageColor:
-                                                sound ? white : primaryColor,
-                                            height: 10,
-                                            width: 10),
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(left: 8.0),
-                                          child: Text(
-                                            utils.getTranslated(
-                                                context, "soundOn"),
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodySmall!
-                                                .copyWith(
-                                                    color: sound
-                                                        ? white
-                                                        : primaryColor),
-                                          ),
-                                        )
-                                      ],
-                                    ),
-                                  ),
-                                  borderRadius: const BorderRadius.all(
-                                      Radius.circular(20)),
-                                  onTap: () async {
-                                    changeValue(true);
-                                    music.play(click);
-                                    setState(() {
-                                      sound = true;
-                                    });
-                                    if (Music.status != null &&
-                                        Music.status == "playing") {
-                                    } else {
-                                      await music.play(backMusic);
-                                    }
-                                  },
-                                ),
-                                InkWell(
-                                  borderRadius: const BorderRadius.all(
-                                      Radius.circular(20)),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 5),
-                                    decoration: BoxDecoration(
-                                        color: sound ? white : primaryColor,
-                                        borderRadius: const BorderRadius.all(
-                                            Radius.circular(20))),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        getSvgImage(
-                                            imageName: 'soundoff_dark',
-                                            imageColor:
-                                                sound ? primaryColor : white,
-                                            height: 10,
-                                            width: 10),
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(left: 8.0),
-                                          child: Text(
-                                            utils.getTranslated(
-                                                context, "soundOff"),
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodySmall!
-                                                .copyWith(
-                                                    color: sound
-                                                        ? primaryColor
-                                                        : white),
-                                          ),
-                                        )
-                                      ],
-                                    ),
-                                  ),
-                                  onTap: () async {
-                                    if (Music.status != null &&
-                                        Music.status == "playing") {
-                                      await music.stop();
-                                    }
-                                    changeValue(false);
-                                    setState(() {
-                                      sound = false;
-                                    });
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        getTile(utils.getTranslated(context, "history"),
-                            "history_icon", true),
-                        if (!_auth.currentUser!.isAnonymous) ...[
-                          getTile(utils.getTranslated(context, "shop"),
-                              "shop_icon", true),
-                          getTile(utils.getTranslated(context, "skin"),
-                              "skin_icon", true),
-                        ],
-                        if (_auth.currentUser!.isAnonymous) ...[
-                          InkWell(
-                            onTap: () async {
-                              music.play(click);
-                              Navigator.push(
-                                  context,
-                                  CupertinoPageRoute(
-                                      builder: (context) => LoginWithEmail()));
-                            },
-                            child: ListTile(
-                              leading: Icon(
-                                Icons.login,
-                                color: primaryColor,
-                                size: 22,
-                              ),
-                              title: Text(
-                                utils.getTranslated(context, "signInNow"),
-                                style: TextStyle(
-                                    color: primaryColor,
-                                    fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                        ],
-                        getTile(utils.getTranslated(context, "changeLanguage"),
-                            "language_icon", true),
-                        // More Games section removed
-                        getTile(utils.getTranslated(context, "contactUs"),
-                            "contactus_icon", true),
-                        getTile(utils.getTranslated(context, "aboutUs"),
-                            "aboutus_icon", true),
-                        getTile(utils.getTranslated(context, "termCond"),
-                            "termscond_icon", true),
-                        getTile(utils.getTranslated(context, "privacy"),
-                            "privacypolicy_icon", true),
-                        getTile(
-                            utils.getTranslated(context, "howToPlayHeading"),
-                            "help_icon",
-                            true),
-                        getTile(utils.getTranslated(context, "rate"),
-                            "rateus_icon", true),
-                        getTile(utils.getTranslated(context, "share"),
-                            "share_app", true),
-                        getTile(utils.getTranslated(context, "logout"),
-                            "logout_icon", true),
-                        getTile(utils.getTranslated(context, "deleteAccount"),
-                            "delete_user", true),
-                      ],
-                    ),
-                  ),
+              ),
+      ),
+    );
+  }
+
+  // ─── Header ──────────────────────────────────────────────────────────────
+
+  Widget _buildTopBar() {
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: () {
+                music.play(click);
+                Navigator.pop(context);
+              },
+              child: Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: surfaceColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: lineColor),
+                  boxShadow: [shadowSm],
                 ),
-              ],
-            ),
-            Positioned(
-              top: MediaQuery.of(context).size.height * .22 - 50,
-              left: MediaQuery.of(context).size.width / 2.5,
-              child: GestureDetector(
-                onTap: () {
-                  if (!_auth.currentUser!.isAnonymous) {
-                    openEditProfileBottomSheet();
-                  }
-                },
-                child: Container(
-                  child: Center(
-                    child: Stack(
-                      children: [
-                        CircleAvatar(
-                          child: CircleAvatar(
-                            backgroundImage: NetworkImage(profilePic),
-                            radius: 35,
-                          ),
-                          backgroundColor: primaryColor,
-                          radius: 40,
-                        ),
-                        _auth.currentUser!.isAnonymous
-                            ? Container()
-                            : Positioned.directional(
-                                textDirection: Directionality.of(context),
-                                bottom: 8,
-                                end: 0,
-                                child: Container(
-                                  padding: EdgeInsets.all(2.0),
-                                  decoration: BoxDecoration(
-                                      color: grey,
-                                      borderRadius:
-                                          BorderRadius.circular(50.0)),
-                                  child: Icon(
-                                    Icons.edit,
-                                    size: 20,
-                                    color: primaryColor,
-                                  ),
-                                ))
-                      ],
-                    ),
-                  ),
-                ),
+                child: Icon(Icons.arrow_back_rounded,
+                    color: inkColor, size: 20),
               ),
             ),
-            utils.showCircularProgress(isLoading, secondarySelectedColor),
+            const SizedBox(width: 14),
+            Text('Settings',
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 24,
+                    color: inkColor)),
           ],
         ),
       ),
     );
   }
 
-  _imgFromGallery() async {
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+  // ─── Profile card ─────────────────────────────────────────────────────────
 
+  Widget _buildProfileCard() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        decoration: cardDecoration(radius: 22),
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: () {
+                if (!_auth.currentUser!.isAnonymous) {
+                  openEditProfileBottomSheet();
+                }
+              },
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    backgroundImage: NetworkImage(profilePic),
+                    radius: 30,
+                    backgroundColor: surface2Color,
+                  ),
+                  if (!_auth.currentUser!.isAnonymous)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: surfaceColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: lineColor),
+                        ),
+                        child:
+                            Icon(Icons.edit, size: 12, color: ink2Color),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(utils.limitChar(username),
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 17,
+                          color: inkColor)),
+                  if (_auth.currentUser!.email != null)
+                    Text(_auth.currentUser!.email!,
+                        style: TextStyle(
+                            fontSize: 12, color: ink2Color)),
+                  const SizedBox(height: 5),
+                  _RankBadge(score: score ?? 0, size: 'sm'),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Stat cards ───────────────────────────────────────────────────────────
+
+  Widget _buildStatCards() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      child: Row(
+        children: [
+          _StatTile(
+              label: 'Coins',
+              value: '$coin',
+              color: goldColor),
+          const SizedBox(width: 10),
+          _StatTile(
+              label: 'Played',
+              value: '$matchPlayedCount',
+              color: xColor),
+          const SizedBox(width: 10),
+          _StatTile(
+              label: 'Won',
+              value: '$matchWon',
+              color: goodColor),
+        ],
+      ),
+    );
+  }
+
+  // ─── Section builder ──────────────────────────────────────────────────────
+
+  Widget _buildSection(String title, List<Widget> rows) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title,
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.8,
+                  color: ink3Color)),
+          const SizedBox(height: 10),
+          Container(
+            decoration: cardDecoration(radius: 18),
+            clipBehavior: Clip.hardEdge,
+            child: Column(children: rows),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────
+
+  _imgFromGallery() async {
+    final pickedFile =
+        await picker.pickImage(source: ImageSource.gallery);
     setState(() {
       _imageFile = File(pickedFile!.path);
     });
-
     uploadImageToFirebase(context);
     Navigator.pop(context);
   }
@@ -496,504 +506,336 @@ class _ProfileBodyState extends State<Profile> {
   }
 
   Future uploadImageToFirebase(BuildContext context) async {
-    setState(() {
-      isLoading = true;
-    });
+    setState(() => isLoading = true);
     String fileName = _imageFile!.path.split('/').last;
-
-    firebase_storage.Reference ref = firebase_storage.FirebaseStorage.instance
+    firebase_storage.Reference ref = firebase_storage
+        .FirebaseStorage.instance
         .ref()
         .child('userProfiles')
         .child('/$fileName');
-
     final metadata = firebase_storage.SettableMetadata(
         contentType: 'image/jpeg',
         customMetadata: {'picked-file-path': fileName});
-    firebase_storage.UploadTask uploadTask;
-    uploadTask = ref.putFile(File(_imageFile!.path), metadata);
+    firebase_storage.UploadTask uploadTask =
+        ref.putFile(File(_imageFile!.path), metadata);
 
     await Future.value(uploadTask).then((value) async {
       var data = await value.ref.getDownloadURL();
       var ins = GetUserInfo();
       await ins.setProfilePic(data);
-
-      utils.setSnackbar(
-          context, utils.getTranslated(context, "ProfileUpdatedSuccessfully"));
-      setState(() {
-        isLoading = false;
-      });
+      utils.setSnackbar(context,
+          utils.getTranslated(context, "ProfileUpdatedSuccessfully"));
+      setState(() => isLoading = false);
     }).onError((error, stackTrace) {
       if (mounted) {
-        utils.setSnackbar(
-            context, utils.getTranslated(context, "SomethingWentWrong"));
+        utils.setSnackbar(context,
+            utils.getTranslated(context, "SomethingWentWrong"));
       }
-
-      setState(() {
-        isLoading = false;
-      });
+      setState(() => isLoading = false);
     });
   }
 
   changeValue(bool val) async {
-    SharedPreferences _sp = await SharedPreferences.getInstance();
-    await _sp.setBool(appName + "SFX-ENABLED", val);
-  }
-
-  getTile(String title, String img, bool isSVGImage) {
-    return ListTile(
-      leading: title != utils.getTranslated(context, 'playMoreGames')
-          ? Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                isSVGImage
-                    ? getSvgImage(
-                        imageName: img,
-                      )
-                    : Image.asset('assets/images/$img.png')
-              ],
-            )
-          : Icon(
-              Icons.games,
-              color: primaryColor,
-              size: 20,
-            ),
-      title: Text(
-        title,
-        style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
-      ),
-      onTap: () async {
-        try {
-          music.play(click);
-
-          if (title == utils.getTranslated(context, "history")) {
-            await InternetAddress.lookup('google.com');
-            Navigator.of(context).push(
-              CupertinoPageRoute(
-                  builder: (context) {
-                    return GameHistory();
-                  },
-                  fullscreenDialog: true),
-            );
-          } else if (title == utils.getTranslated(context, "shop")) {
-            await InternetAddress.lookup('google.com');
-            Navigator.pushNamed(context, "/shop");
-          } else if (title == utils.getTranslated(context, "skin")) {
-            await InternetAddress.lookup('google.com');
-            Navigator.of(context).pushNamed("/skin");
-          }
-        } on SocketException catch (_) {
-          var dialog = Dialogue();
-          dialog.error(context);
-        }
-        if (title == utils.getTranslated(context, "aboutUs")) {
-          music.play(click);
-          Navigator.push(
-              context,
-              CupertinoPageRoute(
-                  builder: (context) => PrivacyPolicy(
-                        title: utils.getTranslated(context, "aboutUs"),
-                      )));
-        } else if (title == utils.getTranslated(context, "contactUs")) {
-          Navigator.push(
-              context,
-              CupertinoPageRoute(
-                  builder: (context) => PrivacyPolicy(
-                        title: utils.getTranslated(context, "contactUs"),
-                      )));
-        } else if (title == utils.getTranslated(context, "termCond")) {
-          music.play(click);
-          Navigator.push(
-              context,
-              CupertinoPageRoute(
-                  builder: (context) => PrivacyPolicy(
-                        title: utils.getTranslated(context, "termCond"),
-                      )));
-        } else if (title == utils.getTranslated(context, "privacy")) {
-          music.play(click);
-          Navigator.push(
-              context,
-              CupertinoPageRoute(
-                  builder: (context) => PrivacyPolicy(
-                        title: utils.getTranslated(context, "privacy"),
-                      )));
-        } else if (title == utils.getTranslated(context, "howToPlayHeading")) {
-          music.play(click);
-          Navigator.push(
-              context, CupertinoPageRoute(builder: (context) => HowToPlay()));
-        } else if (title == utils.getTranslated(context, "rate")) {
-          _openStoreListing();
-        } else if (title == utils.getTranslated(context, "share")) {
-          var str =
-              "$appName\n\n$appFind$androidLink$packageName\n\n iOS:\n$iosLink$iosPackage";
-
-          SharePlus.instance.share(ShareParams(text: str));
-        } else if (title == utils.getTranslated(context, "logout")) {
-          showDialog(
-              context: context,
-              builder: (context) {
-                var color = secondaryColor;
-
-                return Alert(
-                  title: Text(
-                    utils.getTranslated(context, "logout"),
-                    style: TextStyle(color: white),
-                  ),
-                  isMultipleAction: true,
-                  defaultActionButtonName: utils.getTranslated(context, "ok"),
-                  onTapActionButton: () {},
-                  content: Text(
-                    utils.getTranslated(context, "areYouSure"),
-                    style: TextStyle(color: white),
-                  ),
-                  multipleAction: [
-                    TextButton(
-                        style: ButtonStyle(
-                            backgroundColor: WidgetStateProperty.all(color)),
-                        onPressed: () async {
-                          var userID = FirebaseAuth.instance.currentUser!.uid;
-                          if (FirebaseAuth.instance.currentUser!.isAnonymous) {
-                            Dialogue.removeChild("users", userID);
-                          }
-
-                          localValue.setSkinValue("user_skin", "");
-                          localValue.setSkinValue("opponent_skin", "");
-                          await utils.setUserLoggedIn("isLoggedIn", false);
-
-                          await utils.getUserLoggedIn("isLoggedIn");
-
-                          final GoogleSignIn _googleSignIn =
-                              GoogleSignIn.instance;
-
-                          await _googleSignIn.initialize();
-
-                          await _googleSignIn.signOut();
-
-                          await FirebaseAuth.instance.signOut();
-
-                          music.play(click);
-
-                          Navigator.of(context).pushNamedAndRemoveUntil(
-                              '/authscreen', (Route<dynamic> route) => false);
-                        },
-                        child: Text(utils.getTranslated(context, "yes"),
-                            style: TextStyle(color: white))),
-                    TextButton(
-                        style: ButtonStyle(
-                            backgroundColor: WidgetStateProperty.all(color)),
-                        onPressed: () async {
-                          music.play(click);
-
-                          Navigator.pop(context);
-                        },
-                        child: Text(utils.getTranslated(context, "no"),
-                            style: TextStyle(color: white)))
-                  ],
-                );
-              });
-        } else if (title == utils.getTranslated(context, 'changeLanguage')) {
-          openChangeLanguageBottomSheet();
-        } else if (title == utils.getTranslated(context, 'deleteAccount')) {
-          deleteAccount(context);
-        }
-        // }
-      },
-    );
+    SharedPreferences sp = await SharedPreferences.getInstance();
+    await sp.setBool(appName + "SFX-ENABLED", val);
   }
 
   Future<void> getSound() async {
-    sound = await (utils.getSfxValue());
+    sound = await utils.getSfxValue();
     setState(() {});
   }
 
   _getSavedLanguage() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    String getlanguage = prefs.getString(LAGUAGE_CODE) ?? "";
-
-    selectedLanguage = langCode.indexOf(getlanguage == "" ? "en" : getlanguage);
-
+    String lang = prefs.getString(LAGUAGE_CODE) ?? "";
+    selectedLanguage = langCode.indexOf(lang.isEmpty ? "en" : lang);
     if (mounted) setState(() {});
   }
 
   void _changeLan(String language, BuildContext ctx) async {
-    Locale _locale = await utils.setLocale(language);
-    MyApp.setLocale(ctx, _locale);
+    Locale locale = await utils.setLocale(language);
+    MyApp.setLocale(ctx, locale);
+  }
+
+  void _confirmLogout() {
+    showDialog(
+      context: context,
+      builder: (ctx) => _ConfirmDialog(
+        title: utils.getTranslated(context, "logout"),
+        body: utils.getTranslated(context, "areYouSure"),
+        confirmLabel: utils.getTranslated(context, "yes"),
+        cancelLabel: utils.getTranslated(context, "no"),
+        onConfirm: () async {
+          var userID = FirebaseAuth.instance.currentUser!.uid;
+          if (FirebaseAuth.instance.currentUser!.isAnonymous) {
+            Dialogue.removeChild("users", userID);
+          }
+          localValue.setSkinValue("user_skin", "");
+          localValue.setSkinValue("opponent_skin", "");
+          await utils.setUserLoggedIn("isLoggedIn", false);
+          final GoogleSignIn googleSignIn = GoogleSignIn.instance;
+          await googleSignIn.initialize();
+          await googleSignIn.signOut();
+          await FirebaseAuth.instance.signOut();
+          music.play(click);
+          Navigator.of(context).pushNamedAndRemoveUntil(
+              '/authscreen', (Route<dynamic> route) => false);
+        },
+      ),
+    );
   }
 
   void openChangeLanguageBottomSheet() {
     showModalBottomSheet(
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(40.0),
-                topRight: Radius.circular(40.0))),
-        isScrollControlled: true,
-        context: context,
-        builder: (context) {
-          return Wrap(
-            children: [
-              Padding(
-                padding: EdgeInsets.only(
-                    bottom: MediaQuery.of(context).viewInsets.bottom),
-                child: Form(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    children: [
-                      bottomSheetHandle(),
-                      bottomsheetLabel("changeLanguage"),
-                      StatefulBuilder(
-                        builder:
-                            (BuildContext context, StateSetter setModalState) {
-                          return SingleChildScrollView(
-                            child: Column(
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                children: getLngList(context, setModalState)),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: lineColor,
+                  borderRadius: BorderRadius.circular(999)),
+            ),
+            const SizedBox(height: 20),
+            Text(utils.getTranslated(context, "changeLanguage"),
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                    color: inkColor)),
+            const SizedBox(height: 14),
+            StatefulBuilder(
+              builder: (ctx, setModalState) => Column(
+                children: getLngList(ctx, setModalState),
               ),
-            ],
-          );
-        });
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void openEditProfileBottomSheet() {
     showModalBottomSheet(
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(40.0),
-                topRight: Radius.circular(40.0))),
-        isScrollControlled: true,
-        context: context,
-        builder: (context) {
-          return Wrap(
-            children: [
-              Padding(
-                padding: EdgeInsets.only(
-                    bottom: MediaQuery.of(context).viewInsets.bottom),
-                child: Form(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    children: [
-                      bottomSheetHandle(),
-                      bottomsheetLabel("editProfile"),
-                      StatefulBuilder(
-                        builder:
-                            (BuildContext context, StateSetter setModalState) {
-                          return SingleChildScrollView(
-                            child: Column(
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                children: [
-                                  GestureDetector(
-                                    onTap: _imgFromGallery,
-                                    child: Container(
-                                      child: Center(
-                                        child: Stack(
-                                          children: [
-                                            CircleAvatar(
-                                              child: CircleAvatar(
-                                                backgroundImage:
-                                                    NetworkImage(profilePic),
-                                                radius: 39,
-                                              ),
-                                              backgroundColor: primaryColor,
-                                              radius: 40,
-                                            ),
-                                            Positioned.directional(
-                                                textDirection:
-                                                    Directionality.of(context),
-                                                bottom: 0,
-                                                end: 0,
-                                                child: Container(
-                                                  padding:
-                                                      const EdgeInsets.all(2.0),
-                                                  decoration: BoxDecoration(
-                                                      color: grey,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              50.0)),
-                                                  child: Icon(
-                                                    Icons.edit,
-                                                    size: 20,
-                                                    color: primaryColor,
-                                                  ),
-                                                ))
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(20.0),
-                                    child: TextFormField(
-                                      key: _nameFieldKey,
-                                      keyboardType: TextInputType.text,
-                                      style: TextStyle(
-                                        color: primaryColor,
-                                        fontWeight: FontWeight.normal,
-                                      ),
-                                      textInputAction: TextInputAction.next,
-                                      initialValue: username,
-                                      validator: (val) {
-                                        if (val!.isEmpty) {
-                                          return utils.getTranslated(
-                                              context, "usernameRequired");
-                                        }
-                                        return null;
-                                      },
-                                      onSaved: (String? value) {
-                                        name = value ?? username;
-                                      },
-                                      decoration: InputDecoration(
-                                        prefixIcon: Icon(
-                                          Icons.account_circle_outlined,
-                                          color: primaryColor,
-                                          size: 20,
-                                        ),
-                                        hintText: utils.getTranslated(
-                                            context, "username"),
-                                        hintStyle: Theme.of(context)
-                                            .textTheme
-                                            .titleSmall!
-                                            .copyWith(
-                                                color: primaryColor,
-                                                fontWeight: FontWeight.normal),
-                                        filled: true,
-                                        fillColor: white,
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 5,
-                                        ),
-                                        prefixIconConstraints:
-                                            const BoxConstraints(
-                                          minWidth: 40,
-                                          maxHeight: 20,
-                                        ),
-                                        enabledBorder: UnderlineInputBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(7.0),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsetsDirectional.only(
-                                        bottom: 20.0, end: 20.0, start: 20.0),
-                                    child: ElevatedButton(
-                                        style: ButtonStyle(
-                                            backgroundColor:
-                                                WidgetStateProperty.all(
-                                                    primaryColor)),
-                                        onPressed: changeUserNameInFirebase,
-                                        child: Text(
-                                          utils.getTranslated(context, "save"),
-                                          style: TextStyle(color: white),
-                                        )),
-                                  )
-                                ]),
-                          );
-                        },
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: lineColor,
+                  borderRadius: BorderRadius.circular(999)),
+            ),
+            const SizedBox(height: 20),
+            Text(utils.getTranslated(context, "editProfile"),
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                    color: inkColor)),
+            const SizedBox(height: 20),
+            StatefulBuilder(
+              builder: (ctx, setModalState) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  children: [
+                    GestureDetector(
+                      onTap: _imgFromGallery,
+                      child: Stack(
+                        children: [
+                          CircleAvatar(
+                            backgroundImage: NetworkImage(profilePic),
+                            radius: 40,
+                            backgroundColor: surface2Color,
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(5),
+                              decoration: BoxDecoration(
+                                  color: surfaceColor,
+                                  shape: BoxShape.circle,
+                                  border:
+                                      Border.all(color: lineColor)),
+                              child: Icon(Icons.edit,
+                                  size: 16, color: ink2Color),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: surface2Color,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: lineColor),
+                      ),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 14),
+                      child: TextFormField(
+                        key: _nameFieldKey,
+                        keyboardType: TextInputType.text,
+                        style: TextStyle(
+                            color: inkColor,
+                            fontWeight: FontWeight.w500),
+                        textInputAction: TextInputAction.done,
+                        initialValue: username,
+                        validator: (val) {
+                          if (val!.isEmpty) {
+                            return utils.getTranslated(
+                                context, "usernameRequired");
+                          }
+                          return null;
+                        },
+                        onSaved: (v) => name = v ?? username,
+                        decoration: InputDecoration(
+                          prefixIcon: Icon(
+                              Icons.account_circle_outlined,
+                              color: ink3Color,
+                              size: 20),
+                          border: InputBorder.none,
+                          hintText:
+                              utils.getTranslated(context, "username"),
+                          hintStyle:
+                              TextStyle(color: ink3Color),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: xColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        minimumSize:
+                            const Size(double.infinity, 48),
+                        elevation: 0,
+                      ),
+                      onPressed: changeUserNameInFirebase,
+                      child: Text(
+                          utils.getTranslated(context, "save")),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          );
-        });
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   List<Widget> getLngList(BuildContext ctx, StateSetter setModalState) {
     return languageList
         .asMap()
-        .map(
-          (index, element) => MapEntry(
-              index,
-              InkWell(
-                onTap: () {
-                  if (mounted) {
-                    selectedLanguage = index;
-                    _changeLan(langCode[index], ctx);
-                    setModalState(() {});
-                    setState(() {});
-
-                    Navigator.pop(context);
-                  }
-                },
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20.0, 10.0, 20.0, 10),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            height: 25.0,
-                            decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: selectedLanguage == index
-                                    ? secondaryColor
-                                    : white,
-                                border: Border.all(color: secondaryColor)),
-                            child: Padding(
-                              padding: const EdgeInsets.all(2.0),
-                              child: selectedLanguage == index
-                                  ? Icon(
-                                      Icons.check,
-                                      size: 17.0,
-                                      color: white,
-                                    )
-                                  : Icon(
-                                      Icons.check_box_outline_blank,
-                                      size: 15.0,
-                                      color: white,
-                                    ),
-                            ),
-                          ),
-                          Padding(
-                              padding: const EdgeInsetsDirectional.only(
-                                start: 15.0,
-                              ),
-                              child: Text(
-                                languageList[index]!,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium!
-                                    .copyWith(color: primaryColor),
-                              ))
-                        ],
+        .map((index, element) => MapEntry(
+            index,
+            InkWell(
+              onTap: () {
+                if (mounted) {
+                  selectedLanguage = index;
+                  _changeLan(langCode[index], ctx);
+                  setModalState(() {});
+                  setState(() {});
+                  Navigator.pop(context);
+                }
+              },
+              child: Padding(
+                padding:
+                    const EdgeInsets.fromLTRB(20, 10, 20, 10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: selectedLanguage == index
+                            ? xColor
+                            : surface2Color,
+                        border: Border.all(
+                            color: selectedLanguage == index
+                                ? xColor
+                                : lineColor),
                       ),
-                    ],
-                  ),
+                      child: Icon(Icons.check,
+                          size: 14,
+                          color: selectedLanguage == index
+                              ? Colors.white
+                              : Colors.transparent),
+                    ),
+                    const SizedBox(width: 14),
+                    Text(languageList[index]!,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                            color: inkColor)),
+                  ],
                 ),
-              )),
-        )
+              ),
+            )))
         .values
         .toList();
   }
 
-  Widget bottomSheetHandle() {
-    return Padding(
-      padding: const EdgeInsets.only(top: 10.0),
-      child: Container(
-        decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20.0), color: secondaryColor),
-        height: 5,
-        width: MediaQuery.of(context).size.width * 0.3,
+  void deleteAccount(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => _ConfirmDialog(
+        title: utils.getTranslated(context, "deleteAccount"),
+        body: utils.getTranslated(context, "areYouSure"),
+        confirmLabel: utils.getTranslated(context, "yes"),
+        cancelLabel: utils.getTranslated(context, "no"),
+        isDanger: true,
+        onConfirm: () async {
+          music.play(click);
+          try {
+            await FirebaseAuth.instance.currentUser!.delete();
+            utils.setSnackbar(context,
+                utils.getTranslated(context, 'accountDeletedSuccess'));
+            localValue.setSkinValue("user_skin", "");
+            localValue.setSkinValue("opponent_skin", "");
+            await utils.setUserLoggedIn("isLoggedIn", false);
+            Navigator.of(context).pushNamedAndRemoveUntil(
+                '/authscreen', (Route<dynamic> route) => false);
+          } catch (e) {
+            Navigator.pop(context);
+            if (e.toString().contains('requires-recent-login')) {
+              utils.setSnackbar(context,
+                  utils.getTranslated(context, 'loginAgainToDeleteAccount'));
+            }
+          }
+        },
       ),
     );
   }
-
-  Widget bottomsheetLabel(String labelName) => Padding(
-      padding: const EdgeInsets.only(top: 30.0, bottom: 20),
-      child: Text(
-        utils.getTranslated(context, labelName),
-        style: Theme.of(context)
-            .textTheme
-            .titleLarge!
-            .copyWith(fontWeight: FontWeight.bold),
-      ));
 
   void _getLanguageList() {
     languageList = [
@@ -1003,91 +845,167 @@ class _ProfileBodyState extends State<Profile> {
       utils.getTranslated(context, 'ARABIC_LAN'),
       utils.getTranslated(context, 'RUSSIAN_LAN'),
       utils.getTranslated(context, 'JAPANISE_LAN'),
-      utils.getTranslated(context, 'GERMAN_LAN')
+      utils.getTranslated(context, 'GERMAN_LAN'),
     ];
-  }
-
-  deleteAccount(BuildContext context) {
-    return showDialog(
-        context: context,
-        builder: (context) {
-          var color = secondaryColor;
-
-          return Alert(
-            title: Text(
-              utils.getTranslated(context, "deleteAccount"),
-              style: TextStyle(color: white),
-            ),
-            isMultipleAction: true,
-            defaultActionButtonName: utils.getTranslated(context, "ok"),
-            onTapActionButton: () {},
-            content: Text(
-              utils.getTranslated(context, "areYouSure"),
-              style: TextStyle(color: white),
-            ),
-            multipleAction: [
-              TextButton(
-                  style: ButtonStyle(
-                      backgroundColor: WidgetStateProperty.all(color)),
-                  onPressed: () async {
-                    music.play(click);
-                    try {
-                      var currentUser = FirebaseAuth.instance.currentUser!;
-
-                      await currentUser.delete().then((value) {
-                        utils.setSnackbar(
-                            context,
-                            utils.getTranslated(
-                                context, 'accountDeletedSuccess'));
-                      });
-                      localValue.setSkinValue("user_skin", "");
-                      localValue.setSkinValue("opponent_skin", "");
-                      await utils.setUserLoggedIn("isLoggedIn", false);
-
-                      Navigator.of(context).pushNamedAndRemoveUntil(
-                          '/authscreen', (Route<dynamic> route) => false);
-                    } catch (e) {
-                      Navigator.pop(context);
-                      if (e
-                          .toString()
-                          .contains('firebase_auth/requires-recent-login')) {
-                        utils.setSnackbar(
-                            context,
-                            utils.getTranslated(
-                                context, 'loginAgainToDeleteAccount'));
-                      }
-                    }
-                  },
-                  child: Text(utils.getTranslated(context, "yes"),
-                      style: TextStyle(color: white))),
-              TextButton(
-                  style: ButtonStyle(
-                      backgroundColor: WidgetStateProperty.all(color)),
-                  onPressed: () async {
-                    music.play(click);
-
-                    Navigator.pop(context);
-                  },
-                  child: Text(utils.getTranslated(context, "no"),
-                      style: TextStyle(color: white)))
-            ],
-          );
-        });
   }
 }
 
-// ── Rank Badge ─────────────────────────────────────────────────────────────
+// ── Settings row ──────────────────────────────────────────────────────────────
+
+class _SettingsRow extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final bool isLast;
+
+  const _SettingsRow({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    this.trailing,
+    this.onTap,
+    this.isLast = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 18),
+                ),
+                const SizedBox(width: 13),
+                Expanded(
+                  child: Text(title,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14.5,
+                          color: inkColor)),
+                ),
+                trailing ??
+                    (onTap != null
+                        ? Icon(Icons.chevron_right_rounded,
+                            color: ink3Color, size: 18)
+                        : const SizedBox()),
+              ],
+            ),
+          ),
+        ),
+        if (!isLast) Divider(height: 1, color: line2Color, indent: 62),
+      ],
+    );
+  }
+}
+
+// ── Stat tile ─────────────────────────────────────────────────────────────────
+
+class _StatTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  const _StatTile(
+      {required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: lineColor),
+          boxShadow: [shadowSm],
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(value,
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Poppins',
+                    color: color)),
+            const SizedBox(height: 3),
+            Text(label,
+                style: TextStyle(fontSize: 11, color: ink3Color)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Toggle ────────────────────────────────────────────────────────────────────
+
+class _Toggle extends StatelessWidget {
+  final bool on;
+  final ValueChanged<bool> onChange;
+  const _Toggle({required this.on, required this.onChange});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onChange(!on),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 46,
+        height: 28,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          color: on ? goodColor : lineColor,
+        ),
+        child: AnimatedAlign(
+          duration: const Duration(milliseconds: 180),
+          alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            margin: const EdgeInsets.all(3),
+            width: 22,
+            height: 22,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                    color: Color(0x33000000),
+                    blurRadius: 5,
+                    offset: Offset(0, 2))
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Rank badge ────────────────────────────────────────────────────────────────
 
 class _RankBadge extends StatelessWidget {
   final int score;
-  const _RankBadge({required this.score});
+  final String size;
+  const _RankBadge({required this.score, this.size = 'md'});
 
   static const _tiers = [
-    {'label': '💎 Diamond',  'min': 7000, 'color': 0xFF00E5FF},
-    {'label': '🔮 Platinum', 'min': 3500, 'color': 0xFFB39DDB},
-    {'label': '🥇 Gold',     'min': 1500, 'color': 0xFFFFD700},
-    {'label': '🥈 Silver',   'min': 500,  'color': 0xFFBDBDBD},
-    {'label': '🥉 Bronze',   'min': 0,    'color': 0xFFCD7F32},
+    {'label': 'Diamond', 'min': 7000, 'color': 0xFF5C8DF6},
+    {'label': 'Platinum', 'min': 3500, 'color': 0xFF42B8B0},
+    {'label': 'Gold', 'min': 1500, 'color': 0xFFE0A92B},
+    {'label': 'Silver', 'min': 500, 'color': 0xFF9AA3B2},
+    {'label': 'Bronze', 'min': 0, 'color': 0xFFB0794B},
   ];
 
   Map<String, dynamic> get _tier {
@@ -1101,16 +1019,109 @@ class _RankBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = _tier;
     final col = Color(t['color'] as int);
+    final sm = size == 'sm';
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      padding: EdgeInsets.symmetric(
+          horizontal: sm ? 9 : 11, vertical: sm ? 4 : 6),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: col.withValues(alpha: 0.15),
-        border: Border.all(color: col.withValues(alpha: 0.5), width: 1),
+        color: col.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        t['label'] as String,
-        style: TextStyle(color: col, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+              width: sm ? 6 : 7,
+              height: sm ? 6 : 7,
+              decoration: BoxDecoration(
+                  shape: BoxShape.circle, color: col)),
+          const SizedBox(width: 5),
+          Text(t['label'] as String,
+              style: TextStyle(
+                  color: col,
+                  fontWeight: FontWeight.w700,
+                  fontSize: sm ? 11 : 12.5)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Confirm dialog ────────────────────────────────────────────────────────────
+
+class _ConfirmDialog extends StatelessWidget {
+  final String title;
+  final String body;
+  final String confirmLabel;
+  final String cancelLabel;
+  final VoidCallback onConfirm;
+  final bool isDanger;
+
+  const _ConfirmDialog({
+    required this.title,
+    required this.body,
+    required this.confirmLabel,
+    required this.cancelLabel,
+    required this.onConfirm,
+    this.isDanger = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: surfaceColor,
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(title,
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 17,
+                    color: inkColor)),
+            const SizedBox(height: 10),
+            Text(body,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: ink2Color)),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: lineColor),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(cancelLabel,
+                        style: TextStyle(color: ink2Color)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          isDanger ? red : xColor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      elevation: 0,
+                    ),
+                    onPressed: onConfirm,
+                    child: Text(confirmLabel),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

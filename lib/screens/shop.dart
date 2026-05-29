@@ -105,23 +105,23 @@ class _ShopActivityState extends State<ShopActivity> {
       appBar: AppBar(
         centerTitle: true,
         elevation: 0,
-        backgroundColor: secondaryColor,
+        backgroundColor: bgColor,
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            getSvgImage(imageName: 'shop_icon', imageColor: Colors.white),
-            const SizedBox(
-              width: 2,
-            ),
+            getSvgImage(imageName: 'shop_icon', imageColor: inkColor),
+            const SizedBox(width: 2),
             Padding(
               padding: const EdgeInsets.only(left: 8.0),
-              child: Text(utils.getTranslated(context, "shop")),
+              child: Text(utils.getTranslated(context, "shop"),
+                  style: TextStyle(color: inkColor, fontWeight: FontWeight.w700)),
             ),
           ],
         ),
+        iconTheme: IconThemeData(color: inkColor),
       ),
       body: Container(
-        decoration: utils.gradBack(),
+        color: bgColor,
         height: double.maxFinite,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 30.0, vertical: 40),

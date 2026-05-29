@@ -155,9 +155,9 @@ class _RpsGameScreenState extends State<RpsGameScreen> {
     final draw = myScore == oppScore;
 
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
-      backgroundColor: secondaryColor,
+      backgroundColor: surfaceColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
-      title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: white, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+      title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
       content: Text('$myScore — $oppScore', style: TextStyle(color: secondarySelectedColor, fontSize: 32, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
       actions: [TextButton(onPressed: () {
         if (Navigator.canPop(context)) Navigator.pop(context);
@@ -179,7 +179,7 @@ class _RpsGameScreenState extends State<RpsGameScreen> {
         onPopInvokedWithResult: (didPop, _) { if (!didPop && !_disposed) _handleExit(); },
         child: Scaffold(
           body: Container(
-            decoration: utils.gradBack(),
+            color: bgColor,
             child: SafeArea(child: Column(children: [
               _header(context, 'ROCK PAPER SCISSORS', 'Round $round / $maxR', myScore, oppScore, onExit: _handleExit),
               const SizedBox(height: 12),
@@ -238,8 +238,7 @@ class _RpsGameScreenState extends State<RpsGameScreen> {
                 ),
             ])),
           ),
-        )),
-    );
+        ));
   }
 
   Widget _choiceCircle({required String label, required String emoji, required Color color, required bool picked}) {
@@ -268,14 +267,14 @@ Widget _header(BuildContext ctx, String title, String sub, int myScore, int oppS
       }, child: Icon(Icons.close, color: white.withValues(alpha: 0.7))),
       const Spacer(),
       Column(children: [
-        Text(title, style: TextStyle(color: white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.5)),
+        Text(title, style: TextStyle(color: inkColor, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.5)),
         Text(sub, style: TextStyle(color: secondarySelectedColor, fontSize: 11)),
       ]),
       const Spacer(),
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), color: secondaryColor),
-        child: Text('$myScore — $oppScore', style: TextStyle(color: white, fontWeight: FontWeight.bold)),
+        child: Text('$myScore — $oppScore', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold)),
       ),
     ]),
   );

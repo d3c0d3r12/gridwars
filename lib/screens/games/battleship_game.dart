@@ -178,9 +178,9 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
 
   void _showResult(bool won) {
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
-      backgroundColor: secondaryColor,
+      backgroundColor: surfaceColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
-      title: Text(won ? '🏆 All Ships Sunk!' : '💥 Fleet Destroyed!', style: TextStyle(color: white, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+      title: Text(won ? '🏆 All Ships Sunk!' : '💥 Fleet Destroyed!', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
       content: Text(won ? 'You Win!\n+${widget.args.entryFee * 2} coins' : 'You Lose!', style: TextStyle(color: secondarySelectedColor, fontSize: 18), textAlign: TextAlign.center),
       actions: [TextButton(onPressed: () {
         if (Navigator.canPop(context)) Navigator.pop(context);
@@ -196,7 +196,7 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
         onPopInvokedWithResult: (didPop, _) { if (!didPop && !_disposed) _handleExit(); },
         child: Scaffold(
           body: Container(
-            decoration: utils.gradBack(),
+            color: bgColor,
             child: SafeArea(child: Column(children: [
               gameHeader(context, 'BATTLESHIP',
                   _phase == 'placement' ? 'Setup Phase' : (_myTurn ? 'Your Turn — Fire!' : "${widget.args.oppName}'s Turn"),
@@ -248,8 +248,7 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
               const SizedBox(height: 8),
             ])),
           ),
-        )),
-    );
+        ));
   }
 
   Widget _grid(List<int> data, {required bool isMyGrid, required bool readonly}) {

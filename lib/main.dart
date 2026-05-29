@@ -99,7 +99,7 @@ class _MyAppState extends State<MyApp> {
             builder: (context) => isSplash
                 ? builder(context)
                 : Container(
-                    color: primaryColor,
+                    color: bgColor,
                     child: SafeArea(top: false, child: builder(context)),
                   ),
           );
@@ -107,19 +107,37 @@ class _MyAppState extends State<MyApp> {
         theme: ThemeData(
           useMaterial3: false,
           fontFamily: 'Poppins',
+          scaffoldBackgroundColor: bgColor,
           textTheme: TextTheme(
             bodyLarge: TextStyle(),
             bodyMedium: TextStyle(),
           ).apply(
-            bodyColor: white,
-            displayColor: white,
+            bodyColor: inkColor,
+            displayColor: inkColor,
           ),
           appBarTheme: AppBarTheme(
-            systemOverlayStyle: SystemUiOverlayStyle.light,
+            backgroundColor: bgColor,
+            elevation: 0,
+            systemOverlayStyle: SystemUiOverlayStyle.dark,
+            iconTheme: IconThemeData(color: inkColor),
+            titleTextStyle: TextStyle(
+              color: inkColor,
+              fontFamily: 'Poppins',
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          primaryColor: primaryColor,
-          colorScheme:
-              ColorScheme.fromSwatch().copyWith(secondary: secondaryColor),
+          primaryColor: xColor,
+          colorScheme: ColorScheme.fromSwatch().copyWith(
+            primary: xColor,
+            secondary: xColor,
+            background: bgColor,
+            surface: surfaceColor,
+          ),
+          dialogTheme: DialogThemeData(
+            backgroundColor: surfaceColor,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          ),
         ),
       ),
     );

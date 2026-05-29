@@ -469,239 +469,200 @@ class _SinglePlayerScreenActivityState
     return PopScope(
         canPop: false,
         child: Scaffold(
-          body: Container(
-            padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-            decoration: utils.gradBack(),
+          backgroundColor: bgColor,
+          body: SafeArea(
             child: Column(
               children: [
-                Expanded(
-                  flex: 1,
+                // Top bar
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                   child: Row(
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Row(
-                          children: [
-                            // ValueListenableBuilder: only timer rebuilds each second
-                            ValueListenableBuilder<int>(
-                              valueListenable: _timerNotifier,
-                              builder: (_, secs, __) => Container(
-                                width: 25,
-                                height: 25,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: secs <= 10
-                                        ? Colors.red
-                                        : secondarySelectedColor,
-                                    width: 3,
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '$secs',
-                                    style: TextStyle(
-                                      color: secs <= 10 ? Colors.red : white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                      // Timer ring
+                      ValueListenableBuilder<int>(
+                        valueListenable: _timerNotifier,
+                        builder: (_, secs, __) {
+                          final isDanger = secs <= 10;
+                          final col = isDanger ? red : xColor;
+                          return Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: col, width: 2.5),
+                              color: col.withValues(alpha: 0.08),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '$secs',
+                                style: TextStyle(
+                                  color: isDanger ? red : inkColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
-                            Padding(
-                              padding: const EdgeInsetsDirectional.only(
-                                  start: 8.0, end: 8.0),
-                              child: Text("$currentMove"),
-                            )
-                          ],
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: surfaceColor,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: lineColor),
+                          ),
+                          child: Text(
+                            "$currentMove",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: inkColor,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
                         ),
                       ),
-                      Spacer(),
-                      IconButton(
-                          padding: EdgeInsets.only(),
-                          onPressed: () {
-                            showQuitGameDialog();
-                          },
-                          icon: Icon(
-                            Icons.logout,
-                            color: back,
-                          )),
+                      const SizedBox(width: 10),
+                      GestureDetector(
+                        onTap: () => showQuitGameDialog(),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: surfaceColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: lineColor),
+                          ),
+                          child: Icon(Icons.flag_outlined, color: red, size: 20),
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 Expanded(
                   flex: 8,
-                  child: Container(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 30.0),
-                      child: Center(
-                        child: Stack(
-                          children: [
-                            GridView.builder(
-                              physics: NeverScrollableScrollPhysics(),
-                              shrinkWrap: true,
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: gridSize,
-                                crossAxisSpacing: 10,
-                                mainAxisSpacing: 10,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    child: Center(
+                      child: GridView.builder(
+                        physics: const NeverScrollableScrollPhysics(),
+                        shrinkWrap: true,
+                        gridDelegate:
+                            SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: gridSize,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                        ),
+                        itemCount: gridSize * gridSize,
+                        itemBuilder: (context, i) {
+                          return GestureDetector(
+                            onTap: () {
+                              if (gameStatus == "started" &&
+                                  currentMove ==
+                                      utils.getTranslated(
+                                          context, "yourTurn")) {
+                                playGame(i);
+                              }
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: surfaceColor,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: lineColor),
+                                boxShadow: [shadowSm],
                               ),
-                              itemCount: gridSize * gridSize,
-                              itemBuilder: (context, i) {
-                                return GestureDetector(
-                                  onTap: () {
-                                    if (gameStatus == "started" &&
-                                        currentMove ==
-                                            utils.getTranslated(
-                                                context, "yourTurn")) {
-                                      playGame(i);
-                                    }
-                                  },
-                                  child: Stack(fit: StackFit.expand, children: [
-                                    Align(
-                                      alignment: Alignment.bottomCenter,
-                                      child: Container(
-                                        margin: EdgeInsets.only(
-                                          left: 2,
-                                          right: 2,
-                                          top: 30,
+                              child: buttons[i]['state'] == ""
+                                  ? const SizedBox()
+                                  : Padding(
+                                      padding: EdgeInsets.all(
+                                          MediaQuery.of(context).size.width *
+                                              0.05),
+                                      child: getSvgImage(
+                                        imageName: utils.returnImage(
+                                          i,
+                                          buttons,
+                                          widget.playerSkin,
+                                          widget.doraSkin,
                                         ),
-                                        decoration: BoxDecoration(
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.white54,
-                                              offset: Offset(0, 4),
-                                              spreadRadius: 1.5,
-                                              blurRadius: 7,
-                                            ),
-                                          ],
-                                          borderRadius:
-                                              BorderRadius.circular(40),
-                                        ),
+                                        height: double.maxFinite,
+                                        width: double.maxFinite,
+                                        fit: BoxFit.fill,
                                       ),
                                     ),
-                                    getSvgImage(
-                                        imageName: 'grid_box',
-                                        fit: BoxFit.fill),
-                                    buttons[i]['state'] == ""
-                                        ? const SizedBox()
-                                        : Padding(
-                                            padding: EdgeInsets.all(
-                                                MediaQuery.of(context)
-                                                        .size
-                                                        .width *
-                                                    0.05),
-                                            child: getSvgImage(
-                                              imageName: utils.returnImage(
-                                                i,
-                                                buttons,
-                                                widget.playerSkin,
-                                                widget.doraSkin,
-                                              ),
-                                              height: double.maxFinite,
-                                              width: double.maxFinite,
-                                              fit: BoxFit.fill,
-                                            ),
-                                          ),
-                                  ]),
-                                );
-                              },
                             ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
                     ),
                   ),
                 ),
-                Expanded(
-                  flex: 1,
-                  child: Padding(
-                    padding: const EdgeInsets.only(
-                        left: 20.0, right: 20, bottom: 20),
+                // Player footer
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: surface2Color,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: lineColor),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     child: Row(
                       children: [
-                        Row(
-                          children: [
-                            (_profilePic ?? "") != ""
-                                ? CircleAvatar(
-                                    backgroundImage: NetworkImage(_profilePic!),
-                                    radius: 25,
-                                  )
-                                : const CircleAvatar(
-                                    backgroundColor: Colors.transparent,
-                                    child: XOBattleLogo(size: 50),
-                                    radius: 25,
-                                  ),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        "${utils.getTranslated(context, "sign")} : ",
-                                      ),
-                                      // HERE
-                                      getSvgImage(
-                                        imageName: widget.playerSkin!,
-                                        height: 12,
-                                        imageColor: secondarySelectedColor,
-                                      ),
-                                      // Image.asset(
-                                      //   widget.playerSkin!,
-                                      //   height: 12,
-                                      //   color: secondarySelectedColor,
-                                      // )
-                                    ],
-                                  ),
-                                  Text(
-                                    "${utils.limitChar(_username!, 7)}",
-                                    style: TextStyle(color: white),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                        // Player side
                         Expanded(
-                          child: getSvgImage(
-                              imageName: "vs_small", width: 22, height: 21),
-                        ),
-                        Row(
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Row(
+                          child: Row(
+                            children: [
+                              (_profilePic ?? "") != ""
+                                  ? CircleAvatar(backgroundImage: NetworkImage(_profilePic!), radius: 18, backgroundColor: surface2Color)
+                                  : CircleAvatar(backgroundColor: xSoft, radius: 18, child: Icon(Icons.person, color: xColor, size: 18)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    getSvgImage(
-                                      imageName: widget.doraSkin!,
-                                      height: 12,
-                                    ),
-                                    // Image.asset(
-                                    //   widget.doraSkin!,
-                                    //   height: 12,
-                                    // ),
-                                    Text(
-                                      " : ${utils.getTranslated(context, "sign")}",
-                                    ),
+                                    Row(children: [
+                                      Text("${utils.getTranslated(context, "sign")}: ", style: TextStyle(fontSize: 10, color: ink3Color)),
+                                      getSvgImage(imageName: widget.playerSkin!, height: 11, imageColor: xColor),
+                                    ]),
+                                    Text(utils.limitChar(_username!, 8), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, color: inkColor)),
                                   ],
                                 ),
-                                Text(
-                                  utils.getTranslated(context, "dora"),
-                                  style: TextStyle(color: white),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // VS
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(color: surfaceColor, borderRadius: BorderRadius.circular(7), border: Border.all(color: lineColor)),
+                          child: Text('VS', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10, color: ink3Color, letterSpacing: 1)),
+                        ),
+                        // Dora side
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                                      getSvgImage(imageName: widget.doraSkin!, height: 11, imageColor: oColor),
+                                      Text(" :${utils.getTranslated(context, "sign")}", style: TextStyle(fontSize: 10, color: ink3Color)),
+                                    ]),
+                                    Text(utils.getTranslated(context, "dora"), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11, color: inkColor)),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            const Padding(
-                              padding: EdgeInsets.only(left: 8.0),
-                              child: XOBattleLogo(size: 50),
-                            ),
-                          ],
+                              ),
+                              const SizedBox(width: 8),
+                              const XOBattleLogo(size: 36),
+                            ],
+                          ),
                         ),
                       ],
                     ),

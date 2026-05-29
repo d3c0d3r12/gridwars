@@ -131,7 +131,7 @@ class _SkinsState extends State<Skins> {
                             .textTheme
                             .titleMedium!
                             .copyWith(
-                                color: primaryColor,
+                                color: inkColor,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: 1.2),
                       ),
@@ -356,7 +356,7 @@ class _SkinsState extends State<Skins> {
               getSvgImage(
                 imageName: "skin_icon",
                 height: 18,
-                imageColor: white,
+                imageColor: inkColor,
               ),
               Padding(
                 padding: const EdgeInsets.only(left: 8.0),
@@ -364,12 +364,15 @@ class _SkinsState extends State<Skins> {
               ),
             ],
           ),
-          backgroundColor: secondaryColor,
+          backgroundColor: bgColor,
           elevation: 0,
+          iconTheme: IconThemeData(color: inkColor),
+          titleTextStyle: TextStyle(color: inkColor, fontFamily: 'Poppins', fontSize: 17, fontWeight: FontWeight.w700),
         ),
+        backgroundColor: bgColor,
         body: Container(
           width: MediaQuery.of(context).size.width,
-          decoration: utils.gradBack(),
+          color: bgColor,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             child: ListView(children: [...getChildren()]),

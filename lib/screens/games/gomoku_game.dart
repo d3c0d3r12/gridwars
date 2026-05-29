@@ -128,9 +128,9 @@ class _GomokuGameScreenState extends State<GomokuGameScreen> {
 
   void _showResult(bool won, bool draw) {
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
-      backgroundColor: secondaryColor,
+      backgroundColor: surfaceColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
-      title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: white, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+      title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
       content: Text(won ? '+${widget.args.entryFee * 2} coins!' : draw ? 'No winner' : 'Better luck next time', style: TextStyle(color: secondarySelectedColor), textAlign: TextAlign.center),
       actions: [TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
     ));
@@ -146,7 +146,7 @@ class _GomokuGameScreenState extends State<GomokuGameScreen> {
       onPopInvokedWithResult: (didPop, _) { if (!didPop) _handleExit(); },
       child: Scaffold(
       body: Container(
-        decoration: utils.gradBack(),
+        color: bgColor,
         child: SafeArea(child: Column(children: [
           gameHeader(context, 'GOMOKU', _myTurn ? 'Your Turn' : "${widget.args.oppName}'s Turn", 0, 0, onExit: _handleExit),
           const SizedBox(height: 6),
@@ -191,11 +191,11 @@ class _GomokuGameScreenState extends State<GomokuGameScreen> {
             child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               Container(width: 14, height: 14, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF212121))),
               const SizedBox(width: 4),
-              Text(widget.args.isP1 ? 'You' : widget.args.oppName, style: TextStyle(color: white, fontSize: 12)),
+              Text(widget.args.isP1 ? 'You' : widget.args.oppName, style: TextStyle(color: inkColor, fontSize: 12)),
               const SizedBox(width: 20),
               Container(width: 14, height: 14, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white, border: Border.all())),
               const SizedBox(width: 4),
-              Text(widget.args.isP1 ? widget.args.oppName : 'You', style: TextStyle(color: white, fontSize: 12)),
+              Text(widget.args.isP1 ? widget.args.oppName : 'You', style: TextStyle(color: inkColor, fontSize: 12)),
             ]),
           ),
         ])),

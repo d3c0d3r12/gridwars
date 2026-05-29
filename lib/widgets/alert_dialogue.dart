@@ -25,10 +25,10 @@ class Alert extends StatelessWidget {
       width: 100,
       height: 100,
       child: AlertDialog(
-        backgroundColor: secondaryColor,
+        backgroundColor: surfaceColor,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.35), width: 1.2),
+          borderRadius: BorderRadius.circular(22),
+          side: BorderSide(color: lineColor, width: 1),
         ),
         title: title,
         actionsPadding: EdgeInsets.zero,

@@ -116,9 +116,9 @@ class _Connect4GameScreenState extends State<Connect4GameScreen> {
 
   void _showResult(bool won, bool draw) {
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
-      backgroundColor: secondaryColor,
+      backgroundColor: surfaceColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
-      title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: white, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+      title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
       content: Text(won ? '+${widget.args.entryFee * 2} coins!' : draw ? 'No winner' : 'Better luck next time', style: TextStyle(color: secondarySelectedColor), textAlign: TextAlign.center),
       actions: [TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
     ));
@@ -134,7 +134,7 @@ class _Connect4GameScreenState extends State<Connect4GameScreen> {
       onPopInvokedWithResult: (didPop, _) { if (!didPop) _handleExit(); },
       child: Scaffold(
       body: Container(
-        decoration: utils.gradBack(),
+        color: bgColor,
         child: SafeArea(child: Column(children: [
           gameHeader(context, 'CONNECT 4', _myTurn ? 'Your Turn' : "${widget.args.oppName}'s Turn", 0, 0, onExit: _handleExit),
           const SizedBox(height: 8),
@@ -194,10 +194,10 @@ class _Connect4GameScreenState extends State<Connect4GameScreen> {
           // Legend
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             _legendDot(myColor), const SizedBox(width: 4),
-            Text('You', style: TextStyle(color: white, fontSize: 12)),
+            Text('You', style: TextStyle(color: inkColor, fontSize: 12)),
             const SizedBox(width: 20),
             _legendDot(oppColor), const SizedBox(width: 4),
-            Text(widget.args.oppName, style: TextStyle(color: white, fontSize: 12)),
+            Text(widget.args.oppName, style: TextStyle(color: inkColor, fontSize: 12)),
           ]),
 
           const SizedBox(height: 16),

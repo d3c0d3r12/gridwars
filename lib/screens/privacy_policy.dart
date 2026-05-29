@@ -83,7 +83,7 @@ class StatePrivacy extends State<PrivacyPolicy> with TickerProviderStateMixin {
                   child: Icon(
                     Icons.arrow_back,
                     size: 30,
-                    color: primaryColor,
+                    color: inkColor,
                   ),
                 ),
               ),

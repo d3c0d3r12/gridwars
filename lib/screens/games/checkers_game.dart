@@ -209,9 +209,9 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
 
   void _showResult(bool won) {
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
-      backgroundColor: secondaryColor,
+      backgroundColor: surfaceColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
-      title: Text(won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: white, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+      title: Text(won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
       content: Text(won ? '+${widget.args.entryFee * 2} coins!' : 'Better luck next time', style: TextStyle(color: secondarySelectedColor), textAlign: TextAlign.center),
       actions: [TextButton(onPressed: () {
         if (Navigator.canPop(context)) Navigator.pop(context);
@@ -230,7 +230,7 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
         onPopInvokedWithResult: (didPop, _) { if (!didPop && !_disposed) _handleExit(); },
         child: Scaffold(
           body: Container(
-            decoration: utils.gradBack(),
+            color: bgColor,
             child: SafeArea(child: Column(children: [
               gameHeader(context, 'CHECKERS', _myTurn ? 'Your Turn' : "${widget.args.oppName}'s Turn", 0, 0, onExit: _handleExit),
               const SizedBox(height: 6),
@@ -261,14 +261,13 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
 
               Padding(padding: const EdgeInsets.only(bottom: 12),
                   child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    _dot(myColor), const SizedBox(width: 4), Text('You', style: TextStyle(color: white, fontSize: 12)),
+                    _dot(myColor), const SizedBox(width: 4), Text('You', style: TextStyle(color: inkColor, fontSize: 12)),
                     const SizedBox(width: 20),
-                    _dot(oppColor), const SizedBox(width: 4), Text(widget.args.oppName, style: TextStyle(color: white, fontSize: 12)),
+                    _dot(oppColor), const SizedBox(width: 4), Text(widget.args.oppName, style: TextStyle(color: inkColor, fontSize: 12)),
                   ])),
             ])),
           ),
-        )),
-    );
+        ));
   }
 
   Widget _dot(Color c) => Container(width: 14, height: 14, decoration: BoxDecoration(shape: BoxShape.circle, color: c));

@@ -131,7 +131,7 @@ class GameHistoryState extends State<GameHistory> {
               Navigator.of(context).pop();
             },
           ),
-          backgroundColor: primaryColor,
+          backgroundColor: bgColor,
           elevation: 0.0,
           title: Row(
             mainAxisSize: MainAxisSize.min,
@@ -152,7 +152,7 @@ class GameHistoryState extends State<GameHistory> {
             Container(
               height: MediaQuery.of(context).size.height * 0.1,
               decoration: BoxDecoration(
-                  color: primaryColor,
+                  color: inkColor,
                   borderRadius: BorderRadius.only(
                       bottomLeft: Radius.circular(40),
                       bottomRight: Radius.circular(40))),
@@ -166,11 +166,11 @@ class GameHistoryState extends State<GameHistory> {
                       children: [
                         Text(
                           matchPlayed,
-                          style: TextStyle(color: white),
+                          style: TextStyle(color: inkColor),
                         ),
                         Text(
                           utils.getTranslated(context, "matchPlayed"),
-                          style: TextStyle(color: white),
+                          style: TextStyle(color: inkColor),
                         ),
                       ],
                     ),
@@ -178,8 +178,8 @@ class GameHistoryState extends State<GameHistory> {
                     DropdownButton(
                       iconEnabledColor: white,
                       underline: Container(),
-                      dropdownColor: secondaryColor,
-                      style: TextStyle(color: white),
+                      dropdownColor: surfaceColor,
+                      style: TextStyle(color: inkColor),
                       value: selectedDropdownvalue,
                       items: ['All', 'Today', 'Yesterday']
                           .map<DropdownMenuItem<String>>((value) {
@@ -210,7 +210,7 @@ class GameHistoryState extends State<GameHistory> {
               child: Container(
                 height: MediaQuery.of(context).size.height * 0.05,
                 decoration: BoxDecoration(
-                    color: primaryColor,
+                    color: inkColor,
                     borderRadius: BorderRadius.circular(20)),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10.0),
@@ -219,14 +219,14 @@ class GameHistoryState extends State<GameHistory> {
                       Text(
                         "${utils.getTranslated(context, "transaction")}",
                         style: TextStyle(
-                          color: white,
+                          color: inkColor,
                         ),
                       ),
                       Expanded(
                         child: Text(
                           utils.getTranslated(context, "status"),
                           style: TextStyle(
-                            color: white,
+                            color: inkColor,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -239,13 +239,13 @@ class GameHistoryState extends State<GameHistory> {
                             Text(
                               "${utils.getTranslated(context, "dateTime")}",
                               style: TextStyle(
-                                color: white,
+                                color: inkColor,
                               ),
                             ),
                             sortAs == true
                                 ? Icon(
                                     Icons.arrow_drop_down,
-                                    color: white,
+                                    color: inkColor,
                                   )
                                 : Icon(Icons.arrow_drop_up, color: white)
                           ],
@@ -296,7 +296,7 @@ class GameHistoryState extends State<GameHistory> {
                               child: Table(
                                 border: TableBorder.symmetric(
                                     inside: BorderSide(
-                                  color: primaryColor,
+                                  color: inkColor,
                                   width: 0.3,
                                 )),
                                 children: rows,

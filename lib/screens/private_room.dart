@@ -33,48 +33,59 @@ class _PrivateRoomScreenState extends State<PrivateRoomScreen> with SingleTicker
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: utils.gradBack(),
-        child: SafeArea(child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-            child: Row(children: [
-              IconButton(icon: Icon(Icons.arrow_back, color: white), onPressed: () => Navigator.pop(context)),
-              const Spacer(),
-              Text('PRIVATE ROOM', style: TextStyle(color: white, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 14)),
-              const Spacer(),
-              const SizedBox(width: 48),
-            ]),
-          ),
-
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              color: secondaryColor,
-              border: Border.all(color: secondarySelectedColor.withValues(alpha: 0.25)),
-            ),
-            child: TabBar(
-              controller: _tabs,
-              indicator: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                gradient: LinearGradient(colors: [secondarySelectedColor, const Color(0xFFFF8800)]),
+      backgroundColor: bgColor,
+      body: SafeArea(child: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Row(children: [
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                width: 42, height: 42,
+                decoration: BoxDecoration(
+                  color: surfaceColor, borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: lineColor), boxShadow: [shadowSm],
+                ),
+                child: Icon(Icons.arrow_back_rounded, color: inkColor, size: 20),
               ),
-              labelColor: primaryColor,
-              unselectedLabelColor: white.withValues(alpha: 0.6),
-              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              tabs: const [Tab(text: 'Create Room'), Tab(text: 'Join Room')],
             ),
-          ),
+            const Spacer(),
+            Text('PRIVATE ROOM', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: inkColor, letterSpacing: 1.5)),
+            const Spacer(),
+            const SizedBox(width: 42),
+          ]),
+        ),
 
-          Expanded(
-            child: TabBarView(
-              controller: _tabs,
-              children: const [_CreateRoom(), _JoinRoom()],
-            ),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: surface2Color,
           ),
-        ])),
-      ),
+          padding: const EdgeInsets.all(4),
+          child: TabBar(
+            controller: _tabs,
+            indicator: BoxDecoration(
+              borderRadius: BorderRadius.circular(11),
+              color: surfaceColor,
+              boxShadow: [shadowSm],
+            ),
+            labelColor: inkColor,
+            unselectedLabelColor: ink3Color,
+            labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            indicatorSize: TabBarIndicatorSize.tab,
+            dividerColor: Colors.transparent,
+            tabs: const [Tab(text: 'Create Room'), Tab(text: 'Join Room')],
+          ),
+        ),
+
+        Expanded(
+          child: TabBarView(
+            controller: _tabs,
+            children: const [_CreateRoom(), _JoinRoom()],
+          ),
+        ),
+      ])),
     );
   }
 }
@@ -244,23 +255,30 @@ class _CreateRoomState extends State<_CreateRoom> {
   @override
   Widget build(BuildContext context) {
     if (!_waiting && _code == null) {
-      return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const XOBattleLogo(size: 120),
-        const SizedBox(height: 24),
-        Text('Create a private room\nand share the code with a friend', style: TextStyle(color: white.withValues(alpha: 0.7), height: 1.6), textAlign: TextAlign.center),
-        const SizedBox(height: 32),
-        GestureDetector(
-          onTap: _createRoom,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(colors: [secondarySelectedColor, const Color(0xFFFF8800)]),
+      return Center(child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const XOBattleLogo(size: 110),
+          const SizedBox(height: 24),
+          Text('Create a private room\nand share the code with a friend',
+              style: TextStyle(color: ink2Color, height: 1.6, fontSize: 14),
+              textAlign: TextAlign.center),
+          const SizedBox(height: 28),
+          GestureDetector(
+            onTap: _createRoom,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: xColor,
+                boxShadow: [BoxShadow(color: xColor.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 8))],
+              ),
+              child: const Center(child: Text('Create Room', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16))),
             ),
-            child: Text('Create Room', style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 16)),
           ),
-        ),
-      ]));
+        ]),
+      ));
     }
 
     return PopScope(
@@ -268,38 +286,64 @@ class _CreateRoomState extends State<_CreateRoom> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _cancelRoom();
       },
-      child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Text('Share this code', style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 14)),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: secondaryColor,
-            border: Border.all(color: secondarySelectedColor.withValues(alpha: 0.5), width: 2),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Text(_code!, style: TextStyle(color: secondarySelectedColor, fontSize: 34, fontWeight: FontWeight.bold, letterSpacing: 8)),
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: () {
-                Clipboard.setData(ClipboardData(text: _code!));
-                utils.setSnackbar(context, 'Code copied!');
-              },
-              child: Icon(Icons.copy_rounded, color: secondarySelectedColor.withValues(alpha: 0.7)),
+      child: Center(child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text('Share this code with your friend', style: TextStyle(color: ink2Color, fontSize: 13.5)),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              color: surfaceColor,
+              border: Border.all(color: xColor.withValues(alpha: 0.4), width: 2),
+              boxShadow: [shadowSm],
             ),
-          ]),
-        ),
-        const SizedBox(height: 24),
-        if (_waiting) ...[
-          SizedBox(width: 28, height: 28, child: CircularProgressIndicator(color: secondarySelectedColor, strokeWidth: 2.5)),
-          const SizedBox(height: 12),
-          Text('Waiting for opponent…', style: TextStyle(color: white.withValues(alpha: 0.6))),
-          const SizedBox(height: 20),
-          TextButton(onPressed: _cancelRoom, child: Text('Cancel', style: TextStyle(color: red))),
-        ],
-        if (_found) Text('Opponent found! Loading game…', style: TextStyle(color: Colors.greenAccent)),
-      ])),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(_code!,
+                  style: TextStyle(color: xColor, fontSize: 34, fontWeight: FontWeight.w800,
+                      letterSpacing: 8, fontFamily: 'Poppins')),
+              const SizedBox(width: 14),
+              GestureDetector(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: _code!));
+                  utils.setSnackbar(context, 'Code copied!');
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: xSoft, borderRadius: BorderRadius.circular(10)),
+                  child: Icon(Icons.copy_rounded, color: xColor, size: 18),
+                ),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 24),
+          if (_waiting) ...[
+            SizedBox(width: 28, height: 28, child: CircularProgressIndicator(color: xColor, strokeWidth: 2.5)),
+            const SizedBox(height: 12),
+            Text('Waiting for opponent…', style: TextStyle(color: ink2Color)),
+            const SizedBox(height: 20),
+            OutlinedButton(
+              onPressed: _cancelRoom,
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: red.withValues(alpha: 0.5)),
+                foregroundColor: red,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Cancel'),
+            ),
+          ],
+          if (_found)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: goodColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text('Opponent found! Loading game…', style: TextStyle(color: goodColor, fontWeight: FontWeight.w600)),
+            ),
+        ]),
+      )),
     );
   }
 }
@@ -424,54 +468,59 @@ class _JoinRoomState extends State<_JoinRoom> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const XOBattleLogo(size: 100),
-        const SizedBox(height: 24),
-        Text('Enter room code', style: TextStyle(color: white.withValues(alpha: 0.7), fontSize: 14)),
-        const SizedBox(height: 14),
-        Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            color: white.withValues(alpha: 0.08),
-            border: Border.all(color: white.withValues(alpha: 0.18)),
-          ),
-          child: TextField(
-            controller: _codeCtrl,
-            textAlign: TextAlign.center,
-            textCapitalization: TextCapitalization.characters,
-            maxLength: 6,
-            style: TextStyle(color: white, fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 8),
-            decoration: InputDecoration(
-              counterText: '',
-              border: InputBorder.none,
-              hintText: 'XXXXXX',
-              hintStyle: TextStyle(color: white.withValues(alpha: 0.2), letterSpacing: 8, fontSize: 28),
-              contentPadding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-          ),
-        ),
-        if (_error.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(_error, style: TextStyle(color: red, fontSize: 12)),
-        ],
-        const SizedBox(height: 24),
-        GestureDetector(
-          onTap: _loading ? null : _joinRoom,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 14),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const XOBattleLogo(size: 90),
+          const SizedBox(height: 24),
+          Text('Enter the 6-letter room code', style: TextStyle(color: ink2Color, fontSize: 14)),
+          const SizedBox(height: 16),
+          Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(colors: [secondarySelectedColor, const Color(0xFFFF8800)]),
+              color: surfaceColor,
+              border: Border.all(color: lineColor),
+              boxShadow: [shadowSm],
             ),
-            child: Center(child: _loading
-                ? SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: primaryColor, strokeWidth: 2.5))
-                : Text('Join Room', style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 16))),
+            child: TextField(
+              controller: _codeCtrl,
+              textAlign: TextAlign.center,
+              textCapitalization: TextCapitalization.characters,
+              maxLength: 6,
+              style: TextStyle(color: xColor, fontSize: 28, fontWeight: FontWeight.w800,
+                  letterSpacing: 8, fontFamily: 'Poppins'),
+              decoration: InputDecoration(
+                counterText: '',
+                border: InputBorder.none,
+                hintText: 'XXXXXX',
+                hintStyle: TextStyle(color: ink3Color, letterSpacing: 8, fontSize: 28),
+                contentPadding: const EdgeInsets.symmetric(vertical: 18),
+              ),
+            ),
           ),
-        ),
-      ]),
+          if (_error.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(_error, style: TextStyle(color: red, fontSize: 12, fontWeight: FontWeight.w500)),
+          ],
+          const SizedBox(height: 24),
+          GestureDetector(
+            onTap: _loading ? null : _joinRoom,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: _loading ? xColor.withValues(alpha: 0.5) : xColor,
+                boxShadow: _loading ? [] : [BoxShadow(color: xColor.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 8))],
+              ),
+              child: Center(child: _loading
+                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                  : const Text('Join Room', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16))),
+            ),
+          ),
+        ]),
+      ),
     );
   }
 }

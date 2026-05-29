@@ -26,38 +26,24 @@ class Dialogue {
         context: context,
         builder: (context) => PopScope(
               canPop: false,
-              child: AlertDialog(
-                backgroundColor: Colors.transparent,
-                content: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          secondaryColor,
-                          primaryColor,
-                          Color(0xFF06030F),
-                        ]),
-                    borderRadius: BorderRadius.all(Radius.circular(24.0)),
-                    border: Border.all(
-                      color: secondarySelectedColor.withValues(alpha: 0.4),
-                      width: 1.5,
-                    ),
-                  ),
+              child: Dialog(
+                backgroundColor: surfaceColor,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 18.0),
-                        child: Text(
-                          utils.getTranslated(context, "gameOver"),
-                          style: TextStyle(
-                            color: secondarySelectedColor,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.2,
-                          ),
+                      Text(
+                        utils.getTranslated(context, "gameOver"),
+                        style: TextStyle(
+                          color: xColor,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          letterSpacing: 1.5,
                         ),
                       ),
+                      const SizedBox(height: 16),
                       Padding(
                         padding: const EdgeInsets.only(top: 8.0),
                         child: Container(
@@ -88,81 +74,46 @@ class Dialogue {
                                         : Image.network(pic!))))),
                       ),
                       Padding(
-                        padding: const EdgeInsets.all(8.0),
+                        padding: const EdgeInsets.only(top: 6.0),
                         child: Text(
-                          "$playerName" +
-                              " " +
-                              utils.getTranslated(context, "win"),
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge!
-                              .copyWith(
-                                  color: white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14),
+                          "$playerName ${utils.getTranslated(context, "win")}",
+                          style: TextStyle(color: inkColor, fontWeight: FontWeight.w800, fontSize: 20),
                           textAlign: TextAlign.center,
                         ),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text(
-                          winText,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall!
-                              .copyWith(color: white.withValues(alpha: 0.8)),
+                      if (winText.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(winText, style: TextStyle(color: ink2Color, fontSize: 14), textAlign: TextAlign.center),
                         ),
-                      ),
-                      point != ""
-                          ? Chip(
-                              backgroundColor: secondarySelectedColor.withValues(alpha: 0.2),
-                              side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.5)),
-                              label: Text(
-                                point!,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleSmall!
-                                    .copyWith(color: secondarySelectedColor),
-                              ),
-                              avatar: getSvgImage(imageName: "coin_symbol"),
-                            )
-                          : Container(),
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 16, right: 16),
-                        child: Align(
-                          alignment: Alignment.bottomRight,
-                          child: GestureDetector(
-                            onTap: () async {
-                              music.play(click);
-                              if (gameKey != null) {
-                                removeChild("Game", gameKey);
-                              }
-                              Navigator.popUntil(
-                                  context, ModalRoute.withName("/home"));
-                            },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [secondarySelectedColor, Color(0xFFFF8800)],
-                                  begin: Alignment.centerLeft,
-                                  end: Alignment.centerRight,
-                                ),
-                                borderRadius: BorderRadius.all(Radius.circular(20.0)),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 22.0, vertical: 8),
-                                child: Text(
-                                  utils.getTranslated(context, "ok"),
-                                  style: TextStyle(
-                                    color: primaryColor,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
+                      if (point != null && point!.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                          decoration: BoxDecoration(color: goldSoft, borderRadius: BorderRadius.circular(999)),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.monetization_on_rounded, color: goldColor, size: 16),
+                            const SizedBox(width: 5),
+                            Text(point!, style: TextStyle(color: const Color(0xFF9A6516), fontWeight: FontWeight.w700)),
+                          ]),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      GestureDetector(
+                        onTap: () async {
+                          music.play(click);
+                          if (gameKey != null) removeChild("Game", gameKey);
+                          Navigator.popUntil(context, ModalRoute.withName("/home"));
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: xColor,
+                            borderRadius: BorderRadius.circular(14),
                           ),
+                          child: Center(child: Text(utils.getTranslated(context, "ok"),
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15))),
                         ),
                       ),
                     ],
@@ -186,12 +137,12 @@ class Dialogue {
         context: context,
         title: Text(
           utils.getTranslated(context, "gameOver"),
-          style: TextStyle(color: white),
+          style: TextStyle(color: inkColor),
         ),
         onTapActionButton: () {},
         content: Text(
           "Game tie",
-          style: TextStyle(color: white, fontSize: 25),
+          style: TextStyle(color: inkColor, fontSize: 25),
         ),
         multipleAction: <Widget>[
           Container(
@@ -202,7 +153,7 @@ class Dialogue {
               },
               child: Text(
                 utils.getTranslated(context, "ok"),
-                style: TextStyle(color: white),
+                style: TextStyle(color: inkColor),
               ),
             ),
           ),
@@ -240,7 +191,7 @@ class Dialogue {
           return Alert(
             title: Text(
               utils.getTranslated(context, "aleart"),
-              style: TextStyle(color: white),
+              style: TextStyle(color: inkColor),
             ),
             isMultipleAction: true,
             defaultActionButtonName: utils.getTranslated(context, "ok"),
@@ -250,7 +201,7 @@ class Dialogue {
             },
             content: Text(
               utils.getTranslated(context, "youDontHaveMoney"),
-              style: TextStyle(color: white),
+              style: TextStyle(color: inkColor),
             ),
           );
         });
@@ -282,7 +233,7 @@ class Dialogue {
         context: context,
         title: Text(
           utils.getTranslated(context, "gameOver"),
-          style: TextStyle(color: white),
+          style: TextStyle(color: inkColor),
         ),
         onTapActionButton: () async {
           music.play(click);
@@ -290,7 +241,7 @@ class Dialogue {
         },
         content: Text(
           utils.getTranslated(context, "tie"),
-          style: TextStyle(color: white),
+          style: TextStyle(color: inkColor),
         ),
         multipleAction: <Widget>[
           Container(
@@ -307,7 +258,7 @@ class Dialogue {
               },
               child: Text(
                 utils.getTranslated(context, "ok"),
-                style: TextStyle(color: white),
+                style: TextStyle(color: inkColor),
               ),
             ),
           ),
@@ -322,7 +273,7 @@ class Dialogue {
         context: context,
         title: Text(
           utils.getTranslated(context, "nextRound"),
-          style: TextStyle(color: white),
+          style: TextStyle(color: inkColor),
           textAlign: TextAlign.center,
         ),
         onTapActionButton: () async {
@@ -330,7 +281,7 @@ class Dialogue {
         },
         content: Text(
           subtitle,
-          style: TextStyle(color: white),
+          style: TextStyle(color: inkColor),
           textAlign: TextAlign.center,
         ),
         multipleAction: <Widget>[
@@ -342,7 +293,7 @@ class Dialogue {
               },
               child: Text(
                 utils.getTranslated(context, "ok"),
-                style: TextStyle(color: white),
+                style: TextStyle(color: inkColor),
               ),
             ),
           ),
@@ -360,7 +311,7 @@ class Dialogue {
               defaultActionButtonName: utils.getTranslated(context, "ok"),
               title: Text(
                 utils.getTranslated(context, "opponentDisconnected"),
-                style: TextStyle(color: white),
+                style: TextStyle(color: inkColor),
               ),
               isMultipleAction: true,
               multipleAction: [
@@ -372,13 +323,13 @@ class Dialogue {
                     },
                     child: Text(
                       utils.getTranslated(context, "ok"),
-                      style: TextStyle(color: white),
+                      style: TextStyle(color: inkColor),
                     ))
               ],
               onTapActionButton: () async {},
               content: Text(
                 "You got  ${entryfee * 2} coins.",
-                style: TextStyle(color: white),
+                style: TextStyle(color: inkColor),
               ),
             ),
           );
@@ -394,7 +345,7 @@ class Dialogue {
             defaultActionButtonName: utils.getTranslated(context, "ok"),
             title: Text(
               utils.getTranslated(context, "error"),
-              style: TextStyle(color: white),
+              style: TextStyle(color: inkColor),
               textAlign: TextAlign.center,
             ),
             isMultipleAction: true,
@@ -406,13 +357,13 @@ class Dialogue {
                   },
                   child: Text(
                     utils.getTranslated(context, "ok"),
-                    style: TextStyle(color: white),
+                    style: TextStyle(color: inkColor),
                   ))
             ],
             onTapActionButton: () async {},
             content: Text(
               utils.getTranslated(context, "checkYourInternet"),
-              style: TextStyle(color: white),
+              style: TextStyle(color: inkColor),
               textAlign: TextAlign.center,
             ),
           );

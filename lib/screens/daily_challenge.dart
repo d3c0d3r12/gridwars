@@ -117,147 +117,153 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: utils.gradBack(),
-        child: SafeArea(
-          child: Column(children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(children: [
-                IconButton(icon: Icon(Icons.arrow_back, color: white), onPressed: () => Navigator.pop(context)),
-                const Spacer(),
-                Column(children: [
-                  Text('DAILY CHALLENGE', style: TextStyle(color: white, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 13)),
-                  Text(
-                    '${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
-                    style: TextStyle(color: secondarySelectedColor, fontSize: 12),
-                  ),
-                ]),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      backgroundColor: bgColor,
+      body: SafeArea(
+        child: Column(children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Row(children: [
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: 42, height: 42,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: secondarySelectedColor.withValues(alpha: 0.15),
-                    border: Border.all(color: secondarySelectedColor.withValues(alpha: 0.4)),
+                    color: surfaceColor, borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: lineColor), boxShadow: [shadowSm],
                   ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    getSvgImage(imageName: 'coin_symbol', height: 12),
-                    const SizedBox(width: 4),
-                    Text('+50', style: TextStyle(color: yellow, fontWeight: FontWeight.bold)),
-                  ]),
-                ),
-              ]),
-            ),
-
-            // Hint
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: white.withValues(alpha: 0.06),
-                border: Border.all(color: white.withValues(alpha: 0.12)),
-              ),
-              child: Row(children: [
-                Icon(Icons.lightbulb_outline, color: secondarySelectedColor, size: 16),
-                const SizedBox(width: 8),
-                Text('Hint: ${_puzzle.hint}', style: TextStyle(color: white.withValues(alpha: 0.8), fontSize: 13)),
-              ]),
-            ),
-
-            // Instruction
-            Padding(
-              padding: const EdgeInsets.only(top: 12, bottom: 4),
-              child: Text(
-                _alreadyDoneToday ? 'Come back tomorrow!' : 'Tap the correct cell to make X win!',
-                style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 13),
-              ),
-            ),
-
-            // Board
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: GridView.builder(
-                  physics: const NeverScrollableScrollPhysics(),
-                  shrinkWrap: true,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3, crossAxisSpacing: 10, mainAxisSpacing: 10,
-                  ),
-                  itemCount: 9,
-                  itemBuilder: (_, i) {
-                    final cell = _puzzle.board[i];
-                    final isWinCell = _completed && i == _puzzle.winMove && !_alreadyDoneToday;
-                    return GestureDetector(
-                      onTap: () => _onTap(i),
-                      child: Stack(fit: StackFit.expand, children: [
-                        getSvgImage(imageName: 'grid_box', fit: BoxFit.fill),
-                        if (cell.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: getSvgImage(
-                              imageName: cell == 'X' ? 'cross_skin' : 'circle_skin',
-                              fit: BoxFit.contain,
-                              imageColor: cell == 'X' ? secondarySelectedColor : white.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        // Highlight empty cells as tappable
-                        if (cell.isEmpty && !_completed)
-                          Container(
-                            margin: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: secondarySelectedColor.withValues(alpha: 0.25), width: 1),
-                            ),
-                          ),
-                        // Green glow on correct win cell
-                        if (isWinCell)
-                          Container(
-                            margin: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: [BoxShadow(color: Colors.greenAccent.withValues(alpha: 0.5), blurRadius: 20, spreadRadius: 4)],
-                            ),
-                          ),
-                      ]),
-                    );
-                  },
+                  child: Icon(Icons.arrow_back_rounded, color: inkColor, size: 20),
                 ),
               ),
-            ),
-
-            // Result message
-            if (_resultMsg.isNotEmpty)
+              const Spacer(),
+              Column(children: [
+                Text('DAILY CHALLENGE', style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1.5, fontSize: 13, color: inkColor)),
+                Text(
+                  '${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
+                  style: TextStyle(color: ink3Color, fontSize: 12),
+                ),
+              ]),
+              const Spacer(),
               Container(
-                margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  color: _completed && !_alreadyDoneToday
-                      ? Colors.greenAccent.withValues(alpha: 0.15)
-                      : secondaryColor.withValues(alpha: 0.8),
-                  border: Border.all(
-                    color: _completed && !_alreadyDoneToday
-                        ? Colors.greenAccent.withValues(alpha: 0.5)
-                        : secondarySelectedColor.withValues(alpha: 0.3),
-                  ),
+                  borderRadius: BorderRadius.circular(999),
+                  color: goldSoft,
+                  border: Border.all(color: goldColor.withValues(alpha: 0.3)),
                 ),
-                child: Text(
-                  _resultMsg,
-                  style: TextStyle(
-                    color: _completed && !_alreadyDoneToday ? Colors.greenAccent : white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                  textAlign: TextAlign.center,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.monetization_on_rounded, color: goldColor, size: 13),
+                  const SizedBox(width: 4),
+                  Text('+50', style: TextStyle(color: const Color(0xFF9A6516), fontWeight: FontWeight.w700, fontSize: 12)),
+                ]),
+              ),
+            ]),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Hint
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: surfaceColor,
+              border: Border.all(color: lineColor),
+              boxShadow: [shadowSm],
+            ),
+            child: Row(children: [
+              Icon(Icons.lightbulb_outline_rounded, color: goldColor, size: 16),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Hint: ${_puzzle.hint}', style: TextStyle(color: ink2Color, fontSize: 13))),
+            ]),
+          ),
+
+          // Instruction
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 4),
+            child: Text(
+              _alreadyDoneToday ? 'Come back tomorrow!' : 'Tap the correct cell to make X win!',
+              style: TextStyle(color: ink2Color, fontSize: 13.5),
+            ),
+          ),
+
+          // Board
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: GridView.builder(
+                physics: const NeverScrollableScrollPhysics(),
+                shrinkWrap: true,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3, crossAxisSpacing: 10, mainAxisSpacing: 10,
+                ),
+                itemCount: 9,
+                itemBuilder: (_, i) {
+                  final cell = _puzzle.board[i];
+                  final isWinCell = _completed && i == _puzzle.winMove && !_alreadyDoneToday;
+                  return GestureDetector(
+                    onTap: () => _onTap(i),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      decoration: BoxDecoration(
+                        color: isWinCell ? goodColor.withValues(alpha: 0.10) : surfaceColor,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isWinCell ? goodColor.withValues(alpha: 0.6) :
+                              (cell.isEmpty && !_completed ? xColor.withValues(alpha: 0.2) : lineColor),
+                          width: isWinCell ? 2 : 1,
+                        ),
+                        boxShadow: isWinCell
+                            ? [BoxShadow(color: goodColor.withValues(alpha: 0.3), blurRadius: 16, spreadRadius: 2)]
+                            : [shadowSm],
+                      ),
+                      child: cell.isNotEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.all(14),
+                              child: getSvgImage(
+                                imageName: cell == 'X' ? 'cross_skin' : 'circle_skin',
+                                fit: BoxFit.contain,
+                                imageColor: cell == 'X' ? xColor : oColor,
+                              ),
+                            )
+                          : null,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+
+          // Result message
+          if (_resultMsg.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                color: _completed && !_alreadyDoneToday
+                    ? goodColor.withValues(alpha: 0.10)
+                    : red.withValues(alpha: 0.08),
+                border: Border.all(
+                  color: _completed && !_alreadyDoneToday
+                      ? goodColor.withValues(alpha: 0.4)
+                      : red.withValues(alpha: 0.3),
                 ),
               ),
+              child: Text(
+                _resultMsg,
+                style: TextStyle(
+                  color: _completed && !_alreadyDoneToday ? goodColor : red,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
 
-            const SizedBox(height: 20),
-          ]),
-        ),
+          const SizedBox(height: 20),
+        ]),
       ),
     );
   }
