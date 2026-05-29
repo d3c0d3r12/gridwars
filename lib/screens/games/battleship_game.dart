@@ -9,9 +9,6 @@ import '../../screens/splash.dart' show utils;
 import 'game_widgets.dart';
 import '../../screens/arcade_lobby.dart';
 
-// 10×10 grid. Ships: 5,4,3,3,2 → 17 total cells.
-// Phase 1: placement (both players randomize/ready)
-// Phase 2: attack (take turns, 0=water,1=ship,2=hit,3=miss)
 class BattleshipGameScreen extends StatefulWidget {
   final GameArgs args;
   const BattleshipGameScreen({super.key, required this.args});
@@ -21,11 +18,12 @@ class BattleshipGameScreen extends StatefulWidget {
 
 class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
   List<int> _myShips    = List.filled(100, 0);
-  List<int> _myAttacks  = List.filled(100, 0); // attacks on MY grid
-  List<int> _oppAttacks = List.filled(100, 0); // my attacks on OPP grid
+  List<int> _myAttacks  = List.filled(100, 0);
+  List<int> _oppAttacks = List.filled(100, 0);
   String _phase = 'placement';
   int _turn = 1, _myHits = 0, _oppHits = 0;
   bool _myReady = false, _oppReady = false, _gameOver = false;
+  bool _disposed = false;
   StreamSubscription? _sub;
   StreamSubscription? _statusSub;
   late int _myNum;
@@ -42,7 +40,7 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
         .child('state')
         .onValue
         .listen((ev) {
-      if (!mounted || ev.snapshot.value == null) return;
+      if (_disposed || !mounted || ev.snapshot.value == null) return;
       final st = Map<String, dynamic>.from(ev.snapshot.value as Map);
       setState(() {
         _phase = st['phase']?.toString() ?? 'placement';
@@ -51,28 +49,30 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
         _oppReady = int.parse(st[widget.args.isP1 ? 'p2Ready' : 'p1Ready'].toString()) == 1;
         _myHits  = int.parse(st['p${widget.args.isP1 ? 1 : 2}Hits'].toString());
         _oppHits = int.parse(st['p${widget.args.isP1 ? 2 : 1}Hits'].toString());
-        // My ships (always loaded from local — opponent can't see them)
+
         final p1Ships = List<int>.from((st['p1Ships'] as List).map((e) => int.parse(e.toString())));
         final p2Ships = List<int>.from((st['p2Ships'] as List).map((e) => int.parse(e.toString())));
-        // My attacks on opp grid
         final p1A = List<int>.from((st['p1Attacks'] as List).map((e) => int.parse(e.toString())));
         final p2A = List<int>.from((st['p2Attacks'] as List).map((e) => int.parse(e.toString())));
+
         if (widget.args.isP1) {
           _myShips    = p1Ships;
-          _myAttacks  = p2A;  // attacks ON my grid = p2's attacks
-          _oppAttacks = p1A;  // MY attacks on opp = p1's attacks
+          _myAttacks  = p2A;
+          _oppAttacks = p1A;
         } else {
           _myShips    = p2Ships;
           _myAttacks  = p1A;
           _oppAttacks = p2A;
         }
       });
-      if (_myHits >= _totalShipCells) _endGame(false); // I've been sunk
-      if (_oppHits >= _totalShipCells) _endGame(true);  // I sank all opp ships
+
+      if (_myHits >= _totalShipCells) _endGame(false);
+      if (_oppHits >= _totalShipCells) _endGame(true);
     });
+
     _statusSub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
         .child('status').onValue.listen((ev) {
-      if (!mounted || _gameOver) return;
+      if (_disposed || !mounted || _gameOver) return;
       if (ev.snapshot.value?.toString() == 'finished') {
         setState(() => _gameOver = true);
         showOpponentLeftDialog(context);
@@ -81,15 +81,20 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
   }
 
   @override
-  void dispose() { _sub?.cancel(); _statusSub?.cancel(); super.dispose(); }
+  void dispose() {
+    _disposed = true;
+    _sub?.cancel();
+    _statusSub?.cancel();
+    super.dispose();
+  }
 
   void _abandonGame() async {
-    if (_gameOver) return;
+    if (_gameOver || _disposed) return;
     setState(() => _gameOver = true);
     _sub?.cancel();
     _statusSub?.cancel();
     await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
-    if (mounted) Navigator.pop(context);
+    if (mounted && !_disposed) Navigator.pop(context);
   }
 
   void _handleExit() => showLeaveConfirmDialog(context, _abandonGame);
@@ -97,29 +102,40 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
   bool get _myTurn => _turn == _myNum && _phase == 'attack' && !_gameOver;
 
   Future<void> _readyUp() async {
+    if (_disposed) return;
     setState(() => _myReady = true);
     final myKey   = widget.args.isP1 ? 'p1Ready' : 'p2Ready';
     final shipsKey = widget.args.isP1 ? 'p1Ships' : 'p2Ships';
     final updates = {myKey: 1, shipsKey: _myShips};
     await ArcadeService.updateState(widget.args.type, widget.args.gameId, updates);
-    // If both ready, start attack phase
+
+    // FIXED: Proper phase transition with both ready check
     if (_oppReady) {
-      await ArcadeService.updateState(widget.args.type, widget.args.gameId, {'phase': 'attack', 'turn': 1});
+      // Both ready - start attack phase with player 1 first
+      await ArcadeService.updateState(widget.args.type, widget.args.gameId, {
+        'phase': 'attack',
+        'turn': 1,
+        'p1Ready': widget.args.isP1 ? 1 : (_oppReady ? 1 : 0),
+        'p2Ready': widget.args.isP1 ? (_oppReady ? 1 : 0) : 1,
+      });
     }
   }
 
   void _randomize() {
+    if (_disposed) return;
     setState(() => _myShips = ArcadeService.randomShipPlacement());
   }
 
   Future<void> _fire(int idx) async {
-    if (!_myTurn || _oppAttacks[idx] != 0) return;
+    if (!_myTurn || _gameOver || _disposed) return;
+    if (_oppAttacks[idx] != 0) return;
+
     final oppShipsKey = widget.args.isP1 ? 'p2Ships' : 'p1Ships';
     final myAtkKey    = widget.args.isP1 ? 'p1Attacks' : 'p2Attacks';
     final oppHitsKey  = widget.args.isP1 ? 'p1Hits' : 'p2Hits';
 
-    // Read opponent ships
     final snap = await ArcadeService.stateRef(widget.args.type, widget.args.gameId).child('state').once();
+    if (_disposed) return;
     final st   = Map<String, dynamic>.from(snap.snapshot.value as Map);
     final oppShips = List<int>.from((st[oppShipsKey] as List).map((e) => int.parse(e.toString())));
     final myAtks   = List<int>.from((st[myAtkKey]    as List).map((e) => int.parse(e.toString())));
@@ -128,11 +144,24 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
     myAtks[idx] = isHit ? 2 : 3;
     music.play(dice);
 
-    final newHits = int.parse(st[oppHitsKey].toString()) + (isHit ? 1 : 0);
-    final next    = _turn == 1 ? 2 : 1;
+    final currentHits = int.parse(st[oppHitsKey].toString());
+    final newHits = currentHits + (isHit ? 1 : 0);
+
+    // FIXED: Proper turn switching
+    int nextTurn = _turn;
+    if (newHits >= _totalShipCells) {
+      // Game over - no need to switch turn
+      nextTurn = _turn;
+    } else if (!isHit) {
+      // Miss - switch turn
+      nextTurn = _turn == 1 ? 2 : 1;
+    } else {
+      // Hit - same player gets another turn
+      nextTurn = _turn;
+    }
 
     await ArcadeService.updateState(widget.args.type, widget.args.gameId,
-        {myAtkKey: myAtks, oppHitsKey: newHits, 'turn': newHits >= _totalShipCells ? _turn : next});
+        {myAtkKey: myAtks, oppHitsKey: newHits, 'turn': nextTurn});
 
     if (newHits >= _totalShipCells) {
       _endGame(true);
@@ -140,11 +169,11 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
   }
 
   void _endGame(bool won) async {
-    if (_gameOver) return;
+    if (_gameOver || _disposed) return;
     setState(() => _gameOver = true);
-    await ArcadeService.endGame(widget.args.type, widget.args.gameId,
-        won ? FirebaseAuth.instance.currentUser!.uid : null, widget.args.entryFee);
-    if (mounted) _showResult(won);
+    final winnerId = won ? FirebaseAuth.instance.currentUser!.uid : null;
+    await ArcadeService.endGame(widget.args.type, widget.args.gameId, winnerId, widget.args.entryFee);
+    if (mounted && !_disposed) _showResult(won);
   }
 
   void _showResult(bool won) {
@@ -153,73 +182,74 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
       title: Text(won ? '🏆 All Ships Sunk!' : '💥 Fleet Destroyed!', style: TextStyle(color: white, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
       content: Text(won ? 'You Win!\n+${widget.args.entryFee * 2} coins' : 'You Lose!', style: TextStyle(color: secondarySelectedColor, fontSize: 18), textAlign: TextAlign.center),
-      actions: [TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
+      actions: [TextButton(onPressed: () {
+        if (Navigator.canPop(context)) Navigator.pop(context);
+        if (Navigator.canPop(context)) Navigator.pop(context);
+      }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
     ));
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) { if (!didPop) _handleExit(); },
-      child: Scaffold(
-      body: Container(
-        decoration: utils.gradBack(),
-        child: SafeArea(child: Column(children: [
-          gameHeader(context, 'BATTLESHIP',
-              _phase == 'placement' ? 'Setup Phase' : (_myTurn ? 'Your Turn — Fire!' : "${widget.args.oppName}'s Turn"),
-              _oppHits, _myHits, onExit: _handleExit),
-          const SizedBox(height: 6),
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) { if (!didPop && !_disposed) _handleExit(); },
+        child: Scaffold(
+          body: Container(
+            decoration: utils.gradBack(),
+            child: SafeArea(child: Column(children: [
+              gameHeader(context, 'BATTLESHIP',
+                  _phase == 'placement' ? 'Setup Phase' : (_myTurn ? 'Your Turn — Fire!' : "${widget.args.oppName}'s Turn"),
+                  _oppHits, _myHits, onExit: _handleExit),
+              const SizedBox(height: 6),
 
-          if (_phase == 'placement') ...[
-            gamePill(_myReady ? 'Waiting for ${widget.args.oppName}…' : 'Place your fleet and press READY!', secondarySelectedColor),
-            const SizedBox(height: 8),
-            // My grid (placement)
-            Expanded(child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Column(children: [
-                Text('YOUR FLEET', style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 11, letterSpacing: 2)),
-                const SizedBox(height: 6),
-                Expanded(child: _grid(_myShips, isMyGrid: true, readonly: _myReady)),
-                const SizedBox(height: 12),
-                if (!_myReady) Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                  _btn('🔀 Randomize', _randomize, const Color(0xFF2196F3)),
-                  _btn('✅ Ready!', _readyUp, const Color(0xFF4CAF50)),
-                ]),
-              ]),
-            )),
-          ] else ...[
-            // Attack phase: two grids
-            if (_myTurn) gamePill('Tap opponent\'s grid to fire! 🎯', secondarySelectedColor),
-            if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName} is firing…", white.withValues(alpha: 0.5)),
-            const SizedBox(height: 6),
-            Expanded(child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Column(children: [
-                Text('OPPONENT WATERS', style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 10, letterSpacing: 2)),
-                const SizedBox(height: 4),
-                Expanded(child: GestureDetector(
-                  onTapUp: (det) {
-                    final size = (MediaQuery.of(context).size.width - 24) / 10;
-                    final col = (det.localPosition.dx / size).floor().clamp(0, 9);
-                    final row = (det.localPosition.dy / size).floor().clamp(0, 9);
-                    _fire(row * 10 + col);
-                  },
-                  child: _grid(_oppAttacks, isMyGrid: false, readonly: !_myTurn),
-                )),
+              if (_phase == 'placement') ...[
+                gamePill(_myReady ? 'Waiting for ${widget.args.oppName}…' : 'Place your fleet and press READY!', secondarySelectedColor),
                 const SizedBox(height: 8),
-                Text('YOUR FLEET', style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 10, letterSpacing: 2)),
-                const SizedBox(height: 4),
-                SizedBox(height: MediaQuery.of(context).size.height * 0.22,
-                  child: _gridWithAttacks(_myShips, _myAttacks)),
-              ]),
-            )),
-          ],
-          const SizedBox(height: 8),
-        ])),
-      ),
-      ), // Scaffold
-    ); // PopScope
+                Expanded(child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(children: [
+                    Text('YOUR FLEET', style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 11, letterSpacing: 2)),
+                    const SizedBox(height: 6),
+                    Expanded(child: _grid(_myShips, isMyGrid: true, readonly: _myReady)),
+                    const SizedBox(height: 12),
+                    if (!_myReady) Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                      _btn('🔀 Randomize', _randomize, const Color(0xFF2196F3)),
+                      _btn('✅ Ready!', _readyUp, const Color(0xFF4CAF50)),
+                    ]),
+                  ]),
+                )),
+              ] else ...[
+                if (_myTurn) gamePill('Tap opponent\'s grid to fire! 🎯', secondarySelectedColor),
+                if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName} is firing…", white.withValues(alpha: 0.5)),
+                const SizedBox(height: 6),
+                Expanded(child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(children: [
+                    Text('OPPONENT WATERS', style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 10, letterSpacing: 2)),
+                    const SizedBox(height: 4),
+                    Expanded(child: GestureDetector(
+                      onTapUp: (det) {
+                        final size = (MediaQuery.of(context).size.width - 24) / 10;
+                        final col = (det.localPosition.dx / size).floor().clamp(0, 9);
+                        final row = (det.localPosition.dy / size).floor().clamp(0, 9);
+                        _fire(row * 10 + col);
+                      },
+                      child: _grid(_oppAttacks, isMyGrid: false, readonly: !_myTurn),
+                    )),
+                    const SizedBox(height: 8),
+                    Text('YOUR FLEET', style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 10, letterSpacing: 2)),
+                    const SizedBox(height: 4),
+                    SizedBox(height: MediaQuery.of(context).size.height * 0.22,
+                        child: _gridWithAttacks(_myShips, _myAttacks)),
+                  ]),
+                )),
+              ],
+              const SizedBox(height: 8),
+            ])),
+          ),
+        )),
+    );
   }
 
   Widget _grid(List<int> data, {required bool isMyGrid, required bool readonly}) {

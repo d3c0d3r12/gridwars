@@ -51,7 +51,7 @@ class ArcadeService {
     return b;
   }
 
-  // ── Matchmaking ─────────────────────────────────────────────────────────
+  // ── Matchmaking (FIXED: better race condition handling) ─────────────────
 
   static Future<Map<String, dynamic>> findOrCreate(String type, {int entryFee = 25}) async {
     final lobbyRef = _db.ref().child('arcadeLobby').child(type);
@@ -86,18 +86,20 @@ class ArcadeService {
     return {'status': 'created', 'gameId': gameId};
   }
 
-  // Atomically claim a lobby slot and join that game.
-  // Returns true if join succeeded, false if someone else grabbed it first.
   static Future<bool> tryJoinExisting(String type, String gameId, int entryFee) async {
     final lobbyRef = _db.ref().child('arcadeLobby').child(type).child(gameId);
+
+    // First check if user has enough coins
+    final userCoinSnap = await _db.ref().child('users').child(_uid).child('coin').once();
+    final userCoins = (userCoinSnap.snapshot.value as int? ?? 0);
+    if (userCoins < entryFee) return false;
+
     final tx = await lobbyRef.runTransaction((v) {
       if (v == null) return Transaction.abort();
-      return Transaction.success(null); // delete the lobby entry atomically
+      return Transaction.success(null);
     });
     if (!tx.committed) return false;
 
-    // Atomic multi-path write: p2 and status together so the status listener
-    // on the creator side always sees a valid p2 when it fires.
     await Future.wait([
       _db.ref().update({
         'arcadeGames/$type/$gameId/p2': _uid,
@@ -127,31 +129,46 @@ class ArcadeService {
   static DatabaseReference stateRef(String type, String gameId) =>
       _db.ref().child('arcadeGames').child(type).child(gameId);
 
-  // ── Game over ────────────────────────────────────────────────────────────
+  // ── Game over (FIXED: better error handling) ────────────────────────────
 
   static Future<void> endGame(String type, String gameId, String? winnerUid, int entryFee) async {
-    await _db.ref().child('arcadeGames').child(type).child(gameId).update({
-      'status': 'finished',
-      'winner': winnerUid ?? 'draw',
-    });
-    if (winnerUid != null && winnerUid.isNotEmpty) {
-      await Future.wait([
-        _db.ref().child('users').child(winnerUid).child('coin').runTransaction(
-          (v) => Transaction.success((v as int? ?? 0) + entryFee * 2)),
-        _db.ref().child('users').child(winnerUid).child('score').runTransaction(
-          (v) => Transaction.success((v as int? ?? 0) + 10)),
-        _db.ref().child('users').child(winnerUid).child('matchwon').runTransaction(
-          (v) => Transaction.success((v as int? ?? 0) + 1)),
-      ]);
+    try {
+      // First mark game as finished
+      await _db.ref().child('arcadeGames').child(type).child(gameId).update({
+        'status': 'finished',
+        'winner': winnerUid ?? 'draw',
+        'endedAt': DateTime.now().toUtc().toString(),
+      });
+
+      // Then award coins to winner
+      if (winnerUid != null && winnerUid.isNotEmpty && winnerUid != 'draw') {
+        await Future.wait([
+          _db.ref().child('users').child(winnerUid).child('coin').runTransaction(
+                  (v) => Transaction.success((v as int? ?? 0) + entryFee * 2)),
+          _db.ref().child('users').child(winnerUid).child('score').runTransaction(
+                  (v) => Transaction.success((v as int? ?? 0) + 10)),
+          _db.ref().child('users').child(winnerUid).child('matchwon').runTransaction(
+                  (v) => Transaction.success((v as int? ?? 0) + 1)),
+        ]);
+      }
+    } catch (e) {
+      print('Error ending game: $e');
     }
   }
 
   // ── User info ────────────────────────────────────────────────────────────
 
   static Future<Map<String, String>> userInfo(String uid) async {
-    final s = await _db.ref().child('users').child(uid).once();
-    final m = (s.snapshot.value as Map?) ?? {};
-    return {'username': m['username']?.toString() ?? 'Player', 'pic': m['profilePic']?.toString() ?? ''};
+    try {
+      final s = await _db.ref().child('users').child(uid).once();
+      final m = (s.snapshot.value as Map?) ?? {};
+      return {
+        'username': m['username']?.toString() ?? 'Player',
+        'pic': m['profilePic']?.toString() ?? ''
+      };
+    } catch (e) {
+      return {'username': 'Player', 'pic': ''};
+    }
   }
 
   // ── Battleship helpers ───────────────────────────────────────────────────
@@ -161,7 +178,9 @@ class ArcadeService {
     final rng  = Random();
     for (final size in [5, 4, 3, 3, 2]) {
       bool placed = false;
-      while (!placed) {
+      int attempts = 0;
+      while (!placed && attempts < 100) {
+        attempts++;
         final horiz = rng.nextBool();
         final row   = rng.nextInt(horiz ? 10 : 10 - size + 1);
         final col   = rng.nextInt(horiz ? 10 - size + 1 : 10);
@@ -176,6 +195,15 @@ class ArcadeService {
             grid[idx] = 1;
           }
           placed = true;
+        }
+      }
+      // If still not placed after 100 attempts, put it anywhere
+      if (!placed) {
+        for (int i = 0; i < 100; i++) {
+          if (grid[i] == 0) {
+            grid[i] = 1;
+            break;
+          }
         }
       }
     }

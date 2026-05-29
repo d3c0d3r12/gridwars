@@ -33,7 +33,8 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
   StreamSubscription? _sub;
   StreamSubscription? _lobbySub;
   Timer? _timeout;
-  bool _navigated = false; // guard against double navigation
+  bool _navigated = false;
+  bool _disposed = false;
   final _uid = FirebaseAuth.instance.currentUser!.uid;
 
   @override
@@ -44,6 +45,7 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
 
   @override
   void dispose() {
+    _disposed = true;
     _sub?.cancel();
     _lobbySub?.cancel();
     _timeout?.cancel();
@@ -51,28 +53,25 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
   }
 
   Future<void> _find() async {
+    if (_disposed) return;
     _navigated = false;
     final result = await ArcadeService.findOrCreate(widget.gameType, entryFee: fixedEntryFee);
-    if (!mounted) return;
+    if (_disposed || !mounted) return;
     final gameId = result['gameId'] as String;
     setState(() => _gameId = gameId);
 
     if (result['status'] == 'joined') {
       final oppId = result['opponentId'] as String;
       final info  = await ArcadeService.userInfo(oppId);
-      if (mounted && !_navigated) {
+      if (mounted && !_navigated && !_disposed) {
         _navigated = true;
         _navigate(gameId, isP1: false, oppId: oppId, oppName: info['username']!);
       }
       return;
     }
 
-    // Created (or re-entering waiting state) — set up two parallel listeners:
-    // 1. Watch OUR game for someone joining via the normal findOrCreate path.
-    // 2. Watch the lobby for games created BEFORE ours (simultaneous-start fix).
-
     _timeout = Timer(const Duration(seconds: 60), () {
-      if (!mounted) return;
+      if (_disposed || !mounted) return;
       ArcadeService.cancelGame(widget.gameType, gameId);
       setState(() { _searching = false; _status = 'No opponent found.\nTap to try again.'; });
     });
@@ -85,56 +84,55 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
         .child('status')
         .onValue
         .listen((ev) async {
-      if (_navigated || ev.snapshot.value != 'active' || !mounted) return;
+      if (_disposed || _navigated || ev.snapshot.value != 'active' || !mounted) return;
       _navigated = true;
       _timeout?.cancel();
       _sub?.cancel();
       _lobbySub?.cancel();
 
-      // Fire-and-forget coin deduction so we don't block navigation.
+      // Fire-and-forget coin deduction
       FirebaseDatabase.instance.ref()
           .child('users').child(_uid).child('coin')
           .runTransaction((v) => Transaction.success((v as int? ?? 0) - fixedEntryFee));
 
       final snap = await FirebaseDatabase.instance.ref()
           .child('arcadeGames').child(widget.gameType).child(gameId).once();
-      if (!mounted) return;
+      if (_disposed || !mounted) return;
       final data = Map<String, dynamic>.from(snap.snapshot.value as Map? ?? {});
       final oppId = data['p2'] as String? ?? '';
-      if (oppId.isEmpty) { _navigated = false; return; } // p2 not written yet, retry
+      if (oppId.isEmpty) {
+        _navigated = false;
+        return;
+      }
       final info  = await ArcadeService.userInfo(oppId);
-      if (mounted) _navigate(gameId, isP1: true, oppId: oppId, oppName: info['username']!);
+      if (mounted && !_disposed) _navigate(gameId, isP1: true, oppId: oppId, oppName: info['username']!);
     });
 
-    // Secondary lobby watcher: if another player created a game BEFORE ours
-    // (smaller Firebase push key = earlier timestamp), we join them. This fixes
-    // the race where two players call findOrCreate simultaneously and both create.
     _lobbySub = FirebaseDatabase.instance
         .ref()
         .child('arcadeLobby')
         .child(widget.gameType)
         .onChildAdded
         .listen((ev) async {
-      if (_navigated || !mounted) return;
+      if (_disposed || _navigated || !mounted) return;
       final otherKey = ev.snapshot.key!;
       final hostUid  = ev.snapshot.value?.toString() ?? '';
-      // Only join a game that was created before ours and isn't ours.
       if (otherKey == gameId || hostUid == _uid || otherKey.compareTo(gameId) >= 0) return;
 
       final ok = await ArcadeService.tryJoinExisting(widget.gameType, otherKey, fixedEntryFee);
-      if (!ok || !mounted || _navigated) return;
+      if (!ok || _disposed || !mounted || _navigated) return;
       _navigated = true;
       _timeout?.cancel();
       _sub?.cancel();
       _lobbySub?.cancel();
-      // Cancel our own waiting game so it doesn't stay in the lobby.
       ArcadeService.cancelGame(widget.gameType, gameId);
       final info = await ArcadeService.userInfo(hostUid);
-      if (mounted) _navigate(otherKey, isP1: false, oppId: hostUid, oppName: info['username']!);
+      if (mounted && !_disposed) _navigate(otherKey, isP1: false, oppId: hostUid, oppName: info['username']!);
     });
   }
 
   void _navigate(String gameId, {required bool isP1, required String oppId, required String oppName}) {
+    if (_disposed) return;
     Widget screen;
     final args = _GameArgs(gameId: gameId, type: widget.gameType, isP1: isP1, oppId: oppId, oppName: oppName, entryFee: fixedEntryFee);
     switch (widget.gameType) {
@@ -150,6 +148,7 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
   }
 
   void _retry() {
+    if (_disposed) return;
     _sub?.cancel();
     _lobbySub?.cancel();
     _timeout?.cancel();
@@ -187,7 +186,6 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
             ),
 
             Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              // Animated icon
               Container(
                 width: 110,
                 height: 110,
@@ -233,8 +231,6 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
   }
 }
 
-// ── Shared args passed to every game screen ────────────────────────────────
-
 class _GameArgs {
   final String gameId, type, oppId, oppName;
   final bool isP1;
@@ -242,5 +238,4 @@ class _GameArgs {
   const _GameArgs({required this.gameId, required this.type, required this.isP1, required this.oppId, required this.oppName, required this.entryFee});
 }
 
-// Export so game screens can import it
 typedef GameArgs = _GameArgs;

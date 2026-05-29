@@ -26,29 +26,29 @@ class MultiplayerScreen extends StatelessWidget {
 
   const MultiplayerScreen(
       {super.key,
-      this.gameKey,
-      this.firstTry,
-      this.oppornentName,
-      this.oppornentPic,
-      this.round,
-      this.imagex,
-      this.imageo,
-      required this.matrixSize});
+        this.gameKey,
+        this.firstTry,
+        this.oppornentName,
+        this.oppornentPic,
+        this.round,
+        this.imagex,
+        this.imageo,
+        required this.matrixSize});
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: Scaffold(
           body: MultiplayerScreenActivity(
-        firstTry: firstTry,
-        gameKey: gameKey,
-        oppornentName: oppornentName,
-        oppornentPic: oppornentPic,
-        round: round,
-        imagex: imagex,
-        imageo: imageo,
-        matrixSize: matrixSize,
-      )),
+            firstTry: firstTry,
+            gameKey: gameKey,
+            oppornentName: oppornentName,
+            oppornentPic: oppornentPic,
+            round: round,
+            imagex: imagex,
+            imageo: imageo,
+            matrixSize: matrixSize,
+          )),
     );
   }
 }
@@ -66,14 +66,14 @@ class MultiplayerScreenActivity extends StatefulWidget {
 
   MultiplayerScreenActivity(
       {super.key,
-      this.gameKey,
-      this.firstTry,
-      this.oppornentName,
-      this.oppornentPic,
-      this.round,
-      this.imagex,
-      this.imageo,
-      required this.matrixSize});
+        this.gameKey,
+        this.firstTry,
+        this.oppornentName,
+        this.oppornentPic,
+        this.round,
+        this.imagex,
+        this.imageo,
+        required this.matrixSize});
 
   @override
   _MultiplayerScreenActivityState createState() =>
@@ -91,9 +91,14 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
   Timer? _gameTimer;
   final _timerNotifier = ValueNotifier<int>(0);
 
+  int _getCurrentTimerDuration() {
+    return _suddenDeathShowing ? blitzCountdown : countdowntime;
+  }
+
   void _startTimer() {
     _stopTimer();
-    _timerNotifier.value = _roundTimerDuration;
+    if (!mounted) return;
+    _timerNotifier.value = _getCurrentTimerDuration();
     _gameTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) { t.cancel(); return; }
       if (_timerNotifier.value <= 0) {
@@ -111,50 +116,58 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
   }
 
   void _onTimerExpired() async {
-    DatabaseEvent status = await _ins
+    if (!mounted) return;
+
+    final statusSnap = await _ins
         .ref()
         .child("Game")
         .child(widget.gameKey)
         .child("status")
         .once();
 
-    if (status.snapshot.value == "running") {
-      DatabaseEvent whosTimeout = await _ins
-          .ref()
-          .child("Game")
-          .child(widget.gameKey)
-          .child("try")
-          .once();
+    if (statusSnap.snapshot.value != "running") return;
 
-      whoseTimeout = whosTimeout.snapshot.value.toString();
+    final trySnap = await _ins
+        .ref()
+        .child("Game")
+        .child(widget.gameKey)
+        .child("try")
+        .once();
 
-      Future.delayed(Duration(milliseconds: 100)).then((value) async {
-        istimerCompleted = false;
-        String? playersUserId = await getUidByPlayer(
-            whosTimeout.snapshot.value.toString());
-        String winnerPlayer =
-            whosTimeout.snapshot.value == "player1" ? "player2" : "player1";
+    final currentTurn = trySnap.snapshot.value.toString();
 
-        if (_auth.currentUser!.uid == playersUserId) {
-          DatabaseEvent winCount = await _ins
-              .ref()
-              .child("Game")
-              .child(widget.gameKey)
-              .child(winnerPlayer)
-              .child("won")
-              .once();
+    final uidSnap = await _ins
+        .ref()
+        .child("Game")
+        .child(widget.gameKey)
+        .child(currentTurn)
+        .child("id")
+        .once();
 
-          await _ins
-              .ref()
-              .child("Game")
-              .child(widget.gameKey)
-              .child(winnerPlayer)
-              .update({
-            "won": int.parse(winCount.snapshot.value.toString()) + 1
-          });
-        }
-      });
-    }
+    if (uidSnap.snapshot.value != _auth.currentUser!.uid) return;
+
+    whoseTimeout = currentTurn;
+    final winnerPlayer = currentTurn == "player1" ? "player2" : "player1";
+
+    final winCountSnap = await _ins
+        .ref()
+        .child("Game")
+        .child(widget.gameKey)
+        .child(winnerPlayer)
+        .child("won")
+        .once();
+
+    final currentWins = winCountSnap.snapshot.value != null
+        ? int.parse(winCountSnap.snapshot.value.toString())
+        : 0;
+
+    await _ins
+        .ref()
+        .child("Game")
+        .child(widget.gameKey)
+        .child(winnerPlayer)
+        .update({"won": currentWins + 1});
+
     if (mounted) {
       setState(() {
         istimerCompleted = true;
@@ -201,14 +214,12 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
 
   // Sudden Death state
   int _consecutiveDraws = 0;
-  int _roundTimerDuration = countdowntime;
   bool _suddenDeathShowing = false;
 
   @override
   void initState() {
     super.initState();
 
-    // For Compatibility with older versions, as we have changed to use svg instead of png.
     if (widget.imagex!.endsWith('.png')) {
       widget.imagex = widget.imagex!.split('.png').first.split('images/').last;
     }
@@ -222,7 +233,6 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
     winGame = null;
 
     yourTry = widget.firstTry;
-    //db referance
     _gameRef = _ins.ref().child("Game");
     _userRef = _ins.ref().child("users");
 
@@ -240,7 +250,6 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
     getFieldValue("profilePic", (e) => profilePic = e, (e) => profilePic = e);
     getFieldValue("username", (e) => username = e, (e) => username = e);
 
-    // Listen for Sudden Death trigger from opponent
     _ins.ref().child("Game").child(widget.gameKey).child("suddenDeath")
         .onValue.listen((ev) {
       if (ev.snapshot.value == true && mounted && !_suddenDeathShowing) {
@@ -248,7 +257,6 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
       }
     });
 
-    // Listen for coin-doubler requests from the opponent
     _doubleSub = _ins
         .ref()
         .child("Game")
@@ -280,7 +288,6 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
               onPressed: () async {
                 Navigator.pop(context);
                 _doubleDialogShowing = false;
-                // Multiply entryFee by 2 in Firebase
                 final feeSnap = await _ins.ref().child("Game").child(widget.gameKey).child("entryFee").once();
                 final fee = (feeSnap.snapshot.value as int? ?? 0);
                 await _ins.ref().child("Game").child(widget.gameKey).update({
@@ -305,15 +312,13 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
       ).then((_) => _doubleDialogShowing = false);
     });
 
-    //----Listen Updates in database and Update local buttons list when data changes
     Multiplayer.updateLocalList(widget.gameKey, _ins, (ev) async {
       music.play(dice);
       buttons[int.parse(ev.snapshot.key.trim())] = await ev.snapshot.value;
-
       status();
       setState(() {});
     });
-//start timer according to turn
+
     getuserDetails();
     gameStatusListener();
   }
@@ -332,10 +337,10 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
   }
 
   getFieldValue(
-    String fieldName,
-    void Function(dynamic count) callback,
-    void Function(dynamic count) update,
-  ) async {
+      String fieldName,
+      void Function(dynamic count) callback,
+      void Function(dynamic count) update,
+      ) async {
     var init;
     try {
       var ins = GetUserInfo();
@@ -373,15 +378,14 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
   void status() {
     List<dynamic> winningConditionToUse;
 
-    // Set winning conditions based on matrix size
     switch (widget.matrixSize) {
-      case "Three": // 3x3
+      case "Three":
         winningConditionToUse = utils.winningCondition;
         break;
-      case "Four": // 4x4
+      case "Four":
         winningConditionToUse = utils.winningConditionFour;
         break;
-      case "Five": // 5x5
+      case "Five":
         winningConditionToUse = utils.winningConditionFive;
         break;
       default:
@@ -412,8 +416,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
 
         var kUid = _auth.currentUser!.uid;
         if (uid == kUid) {
-          _consecutiveDraws = 0; // Reset on a decisive round
-          setState(() => _roundTimerDuration = countdowntime);
+          _consecutiveDraws = 0;
           try {
             await _ins
                 .ref()
@@ -442,28 +445,43 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
     );
   }
 
-  void playGame(int i) {
-    if (buttons[i]["state"] == "") {
-      // Optimistic update: show move on screen INSTANTLY
-      buttons[i]["state"] = "true";
-      buttons[i]["player"] = "$playerValue";
-      yourTry = false;
-      setState(() {});
+  void playGame(int i) async {
+    if (buttons[i]["state"] != "") return;
+    if (yourTry != true) return;
+    if (winVar1 != null || winVar2 != null || winVar3 != null || winGame != null) return;
 
-      // Firebase sync in background — non-blocking, no await
-      _gameRef
-          .child(widget.gameKey)
+    final currentPlayerValue = playerValue;
+    final currentGameKey = widget.gameKey;
+
+    buttons[i]["state"] = "true";
+    buttons[i]["player"] = "$currentPlayerValue";
+    yourTry = false;
+    if (mounted) setState(() {});
+
+    music.play(dice);
+
+    try {
+      await _gameRef
+          .child(currentGameKey)
           .child("buttons")
           .child("$i")
-          .update({"player": playerValue, "state": "true"});
-      _gameRef.child(widget.gameKey).update({
-        "try": playerValue == "player1" ? "player2" : "player1",
+          .update({"player": currentPlayerValue, "state": "true"});
+
+      await _gameRef.child(currentGameKey).update({
+        "try": currentPlayerValue == "player1" ? "player2" : "player1",
       });
+    } catch (e) {
+      if (mounted) {
+        buttons[i]["state"] = "";
+        buttons[i]["player"] = "0";
+        yourTry = true;
+        setState(() {});
+        utils.setSnackbar(context, "Network error! Please try again.");
+      }
     }
   }
 
   Future<void> getPlayerValue() async {
-    // Parallel Firebase reads — all 3 fire simultaneously instead of one-by-one
     final results = await Future.wait([
       _gameRef.child(widget.gameKey).once(),
       _gameRef.child(widget.gameKey).child("player1").child("id").once(),
@@ -503,7 +521,6 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
     });
   }
 
-  //change listener
   gameStatusListener() {
     subs = _ins
         .ref()
@@ -528,37 +545,30 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
         if (mounted) setState(() {});
       }
       if (event.snapshot.key == "status") {
-        /** -------- */
         final gameSnap = await _gameRef.child(widget.gameKey).once();
         final gameData = gameSnap.snapshot.value as Map;
         int? entryfee = gameData["entryFee"] as int?;
         String? player1 = (gameData["player1"] as Map)["id"] as String?;
         String? player2 = (gameData["player2"] as Map)["id"] as String?;
 
-        //    String id = player1 == _auth.currentUser.uid ? player1 : player2;
-        /** -------- */
-
         if (event.snapshot.value == "closed" && mounted) {
           Dialogue d = Dialogue();
-          /** ----counter---- */
-
           _stopTimer();
-          /** -------- */
 
           await Future.delayed(Duration(seconds: 1));
 
           if (mounted && closedByUs == false) {
             await Future.wait([
-                multi.updateMatchResult(_auth.currentUser!.uid, MatchResult.win),
-                updateCoin(_auth.currentUser!.uid, entryfee!),
-              ]);
+              multi.updateMatchResult(_auth.currentUser!.uid, MatchResult.win),
+              updateCoin(_auth.currentUser!.uid, entryfee!),
+            ]);
             History().update(
                 uid: FirebaseAuth.instance.currentUser!.uid,
                 date: DateTime.now().toString(),
                 gameid: widget.gameKey,
                 gotcoin: entryfee * 2,
                 oppornentId:
-                    player1 == _auth.currentUser!.uid ? player2 : player1,
+                player1 == _auth.currentUser!.uid ? player2 : player1,
                 status: "Opponent disconnect",
                 type: "OD");
             d.oppornentDisconnect(context, entryfee, widget.gameKey);
@@ -576,13 +586,10 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
             .child("id")
             .once();
         if (mounted) {
-          /** ----win & loose sound---- */
-
           snap.snapshot.value == _auth.currentUser!.uid
               ? music.play(wingame)
               : music.play(losegame);
         }
-        /** ----stop counter---- */
 
         _stopTimer();
 
@@ -620,9 +627,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
               .once();
 
           if (curRound != widget.round) {
-            // Set button values to default in DB
             initializeButtons();
-            // Update the button states in the database for the correct matrix size
             for (int i = 0; i < buttons.length; i++) {
               _gameRef
                   .child(widget.gameKey)
@@ -631,23 +636,21 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                   .update({"player": "0", "state": ""})
                   .then((_) {})
                   .catchError((error) {
-                    return;
-                  });
+                return;
+              });
             }
           }
 
           if (widget.round == curRound) {
-            /** ----dialoge---- */
             _gameRef.child(widget.gameKey).update({"status": "closed"});
             closedByUs = true;
             setState(() {});
 
-            //let's check which player is winner
             var winnerId, looserId;
             String winText, point;
 
             DatabaseEvent playersData =
-                await _gameRef.child(widget.gameKey).once();
+            await _gameRef.child(widget.gameKey).once();
 
             if (win1Count > win2Count) {
               winnerId = (playersData.snapshot.value as Map)["player1"]["id"];
@@ -691,7 +694,6 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                     oppornentId: looserId,
                     status: "Won",
                     type: "GAME");
-                //looser's history update
                 History().update(
                     uid: looserId,
                     date: DateTime.now().toString(),
@@ -772,7 +774,6 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                     oppornentId: looserId,
                     status: "Won",
                     type: "GAME");
-                //looser's history update
                 History().update(
                     uid: looserId,
                     date: DateTime.now().toString(),
@@ -783,10 +784,10 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                     type: "GAME");
 
                 await Future.wait([
-                multi.updateMatchResult(winnerId.toString(), MatchResult.win),
-                multi.updateMatchResult(looserId, MatchResult.lose),
-                updateCoin(winnerId.toString(), int.parse(r.snapshot.value.toString())),
-              ]);
+                  multi.updateMatchResult(winnerId.toString(), MatchResult.win),
+                  multi.updateMatchResult(looserId, MatchResult.lose),
+                  updateCoin(winnerId.toString(), int.parse(r.snapshot.value.toString())),
+                ]);
               }
 
               if (widget.gameKey != null) {
@@ -794,8 +795,6 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
               }
             } else {
               _stopTimer();
-
-              // Dialoge d = new Dialoge();
               nextRoundDialog(
                 winnerId == _auth.currentUser!.uid
                     ? "$username won"
@@ -807,7 +806,6 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
       }
       if (event.snapshot.key == "tie") {
         if (widget.round == curRound) {
-          // Fetch player data and entry fee to determine winner
           DatabaseEvent idAndWinCountofPlayer1 = await _ins
               .ref()
               .child("Game")
@@ -830,24 +828,23 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
               .once();
 
           var winCountOfPlayer1 =
-              (idAndWinCountofPlayer1.snapshot.value as Map)['won'];
+          (idAndWinCountofPlayer1.snapshot.value as Map)['won'];
           var winCountOfPlayer2 =
-              (idAndWinCountofPlayer2.snapshot.value as Map)['won'];
+          (idAndWinCountofPlayer2.snapshot.value as Map)['won'];
           var idOfPlayer1 =
-              (idAndWinCountofPlayer1.snapshot.value as Map)['id'];
+          (idAndWinCountofPlayer1.snapshot.value as Map)['id'];
           var idOfPlayer2 =
-              (idAndWinCountofPlayer2.snapshot.value as Map)['id'];
+          (idAndWinCountofPlayer2.snapshot.value as Map)['id'];
 
           var winnerId;
           String winText, earnedCoin;
 
-          // Determine winner based on maximum rounds won
           if (winCountOfPlayer1 > winCountOfPlayer2) {
             winnerId = idOfPlayer1;
           } else if (winCountOfPlayer2 > winCountOfPlayer1) {
             winnerId = idOfPlayer2;
           } else {
-            winnerId = ""; // It's a tie in round wins
+            winnerId = "";
           }
 
           winText = winnerId == _auth.currentUser!.uid
@@ -863,7 +860,6 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
           setState(() {});
 
           if (winnerId == "") {
-            // Case: Tie in overall round wins
             final d = Dialogue();
             d.tieMultiplayer(context, widget.gameKey);
             await updateTieCoin(_auth.currentUser!.uid, int.parse(entryFee.snapshot.value.toString()));
@@ -894,9 +890,8 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
               ]);
             }
           } else {
-            // Case: Determined winner based on round wins
             var looserId =
-                (winnerId == idOfPlayer1) ? idOfPlayer2 : idOfPlayer1;
+            (winnerId == idOfPlayer1) ? idOfPlayer2 : idOfPlayer1;
 
             Dialogue.winner(
                 context,
@@ -963,104 +958,116 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
     });
   }
 
-  nextRoundDialog(String subtitle) {
+  void nextRoundDialog(String subtitle) {
     itemSize = 90;
-    // opacity = 0;
+    playcountdown = 3;
+
+    playclocktimer?.cancel();
 
     playclocktimer = Timer.periodic(Duration(seconds: 1), (Timer t) {
       if (mounted && dialogState != null) {
         dialogState!(() {
-          playcountdown--;
+          if (playcountdown > 0) playcountdown--;
         });
       }
 
       if (playcountdown <= 0) {
-        if (playclocktimer != null) playclocktimer!.cancel();
+        t.cancel();
+        playclocktimer = null;
 
-        _startTimer();
-        curRound = curRound + 1;
+        if (mounted) {
+          _startTimer();
+          curRound = curRound + 1;
 
-        if (widget.matrixSize == "Three") {
-          buttons = copyDeepMap(utils.gameButtons);
-        } else if (widget.matrixSize == "Four") {
-          buttons = copyDeepMap(utils.gameButtonsFour);
-        } else if (widget.matrixSize == "Five") {
-          buttons = copyDeepMap(utils.gameButtonsFive);
+          if (widget.matrixSize == "Three") {
+            buttons = copyDeepMap(utils.gameButtons);
+          } else if (widget.matrixSize == "Four") {
+            buttons = copyDeepMap(utils.gameButtonsFour);
+          } else if (widget.matrixSize == "Five") {
+            buttons = copyDeepMap(utils.gameButtonsFive);
+          }
+
+          setState(() {
+            winVar1 = null;
+            winVar2 = null;
+            winVar3 = null;
+            winGame = null;
+            istimerCompleted = false;
+          });
+
+          if (Navigator.canPop(context)) Navigator.pop(context);
         }
-
-        playcountdown = 3;
-        setState(() {
-          winVar1 = null;
-          winVar2 = null;
-          winVar3 = null;
-          winGame = null;
-        });
-
-        Navigator.pop(context);
       }
     });
 
     showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => StatefulBuilder(builder: (context, setState) {
-              dialogState = setState;
-              return PopScope(
-                canPop: false,
-                child: AlertDialog(
-                    backgroundColor: primaryColor,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(20.0))),
-                    title: Text(utils.getTranslated(context, "nextRound"),
+        builder: (context) => StatefulBuilder(builder: (context, setStateDialog) {
+          dialogState = setStateDialog;
+          return PopScope(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) {
+                playclocktimer?.cancel();
+                playclocktimer = null;
+                if (Navigator.canPop(context)) Navigator.pop(context);
+              }
+            },
+            child: AlertDialog(
+                backgroundColor: primaryColor,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(20.0))),
+                title: Text(utils.getTranslated(context, "nextRound"),
+                    style: TextStyle(color: white),
+                    textAlign: TextAlign.center),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(subtitle,
                         style: TextStyle(color: white),
                         textAlign: TextAlign.center),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(subtitle,
-                            style: TextStyle(color: white),
-                            textAlign: TextAlign.center),
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: AnimatedOpacity(
-                            duration: animationDuration,
-                            opacity: opacity,
-                            child: AnimatedContainer(
-                              duration: animationDuration,
-                              width: itemSize,
-                              height: itemSize,
-                              decoration: new BoxDecoration(
-                                color: white,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Center(
-                                  child: Text(
-                                playcountdown.toString(),
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              )),
-                            ),
-                          ),
-                        )
-                      ],
-                    )),
-              );
-            }));
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Container(
+                        width: 90,
+                        height: 90,
+                        decoration: new BoxDecoration(
+                          color: white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                            child: Text(
+                              playcountdown.toString(),
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 32),
+                            )),
+                      ),
+                    )
+                  ],
+                )),
+          );
+        })).then((_) {
+      playclocktimer?.cancel();
+      playclocktimer = null;
+    });
   }
 
   Future<String?> getUidByPlayer(String target) async {
     DatabaseEvent ref =
-        await _gameRef.child(widget.gameKey).child(target).child("id").once();
+    await _gameRef.child(widget.gameKey).child(target).child("id").once();
     String? result = ref.snapshot.value.toString();
     return result;
   }
 
-  //it returns Image for X and O
   returnImage(i) {
+    final myXImage = widget.imagex ?? 'cross_skin';
+    final myOImage = widget.imageo ?? 'circle_skin';
+
     if (istimerCompleted) {
       if (buttons[i]["player"] == whoseTimeout) {
         return "cross_skin";
       } else {
-        return widget.imageo;
+        return myOImage;
       }
     } else if (winVar1 != null &&
         winVar2 != null &&
@@ -1078,22 +1085,24 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
       return "circle_skin";
     else if (buttons[i]["player"] == "player1" && buttons[i]["player"] != "0") {
       if (player1Id == _auth.currentUser!.uid) {
-        return widget.imagex;
+        return myXImage;
       }
-      return widget.imageo;
+      return myOImage;
     } else if (buttons[i]["player"] == "player2" &&
         buttons[i]["player"] != "0") {
       if (player2Id == _auth.currentUser!.uid) {
-        return widget.imagex;
+        return myXImage;
       }
-      return widget.imageo;
+      return myOImage;
     }
+    return myXImage;
   }
 
   @override
   void dispose() {
     _stopTimer();
     _timerNotifier.dispose();
+    playclocktimer?.cancel();
     subs?.cancel();
     _doubleSub?.cancel();
     Multiplayer.dispose();
@@ -1107,25 +1116,41 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
     await Dialogue.suddenDeath(context);
     if (!mounted) return;
     setState(() {
-      _roundTimerDuration = blitzCountdown;
       _consecutiveDraws = 0;
       _suddenDeathShowing = false;
     });
-    // Clear the suddenDeath flag so it can re-trigger if needed
     await _ins.ref().child("Game").child(widget.gameKey).update({"suddenDeath": null, "consecutiveDraws": 0});
     _startTimer();
   }
 
   Future<void> getGamebuttons() async {
-    DatabaseEvent snap =
-        await _gameRef.child(widget.gameKey).child("buttons").once();
-    final data = (snap.snapshot.value as List<dynamic>);
+    try {
+      DatabaseEvent snap = await _gameRef.child(widget.gameKey).child("buttons").once();
+      final data = snap.snapshot.value;
 
-    for (var i = 0; i < data.length; i++) {
-      buttons.addAll({i: copyDeepMap(data[i])});
+      if (data == null) return;
+
+      buttons.clear();
+
+      if (data is List) {
+        for (var i = 0; i < data.length; i++) {
+          if (data[i] is Map) {
+            buttons[i] = copyDeepMap(data[i] as Map);
+          } else {
+            buttons[i] = {"player": "0", "state": ""};
+          }
+        }
+      } else if (data is Map) {
+        data.forEach((key, value) {
+          buttons[int.parse(key.toString())] = copyDeepMap(value as Map);
+        });
+      }
+
+      if (mounted) setState(() {});
+    } catch (e) {
+      initializeButtons();
+      if (mounted) setState(() {});
     }
-
-    setState(() {});
   }
 
   @override
@@ -1140,7 +1165,6 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
       gridSize = 5;
       totalCells = 25;
     } else {
-      // Default to 3x3 if the matrix size is unexpected
       gridSize = 3;
       totalCells = 9;
     }
@@ -1155,7 +1179,6 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
               padding: const EdgeInsets.all(8.0),
               child: Row(
                 children: [
-                  // yourTry == false
                   Row(
                     children: [
                       ValueListenableBuilder<int>(
@@ -1193,7 +1216,6 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                     ],
                   ),
                   Spacer(),
-                  // Coin Doubler button
                   if (!_doubleUsed)
                     GestureDetector(
                       onTap: () async {
@@ -1230,7 +1252,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                                 ),
                                 isMultipleAction: true,
                                 defaultActionButtonName:
-                                    utils.getTranslated(context, "yes"),
+                                utils.getTranslated(context, "yes"),
                                 onTapActionButton: () {},
                                 content: Text(
                                   utils.getTranslated(context, "areYouSure"),
@@ -1240,7 +1262,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                                   TextButton(
                                       style: ButtonStyle(
                                           backgroundColor:
-                                              WidgetStateProperty.all(color)),
+                                          WidgetStateProperty.all(color)),
                                       onPressed: () async {
                                         music.play(click);
 
@@ -1268,11 +1290,11 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                                             date: DateTime.now().toString(),
                                             gameid: widget.gameKey,
                                             gotcoin: -(snap.snapshot.value
-                                                as Map)["entryFee"],
+                                            as Map)["entryFee"],
                                             oppornentId: player1snap
-                                                        .snapshot.value ==
-                                                    FirebaseAuth.instance
-                                                        .currentUser!.uid
+                                                .snapshot.value ==
+                                                FirebaseAuth.instance
+                                                    .currentUser!.uid
                                                 ? player2snap.snapshot.value
                                                 : player1snap.snapshot.value,
                                             status: "Closed Game",
@@ -1293,7 +1315,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                                   TextButton(
                                       style: ButtonStyle(
                                           backgroundColor:
-                                              WidgetStateProperty.all(color)),
+                                          WidgetStateProperty.all(color)),
                                       onPressed: () async {
                                         music.play(click);
 
@@ -1319,15 +1341,15 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
             ),
             Center(
                 child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 28.0),
-              child: Text(
-                "${utils.getTranslated(context, "roundLbl")} $curRound",
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall!
-                    .copyWith(color: white, fontWeight: FontWeight.bold),
-              ),
-            )),
+                  padding: const EdgeInsets.symmetric(vertical: 28.0),
+                  child: Text(
+                    "${utils.getTranslated(context, "roundLbl")} $curRound",
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineSmall!
+                        .copyWith(color: white, fontWeight: FontWeight.bold),
+                  ),
+                )),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 30.0),
@@ -1380,17 +1402,16 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                           getSvgImage(imageName: 'grid_box', fit: BoxFit.fill),
                           buttons[i] == null || buttons[i]['state'] == ""
                               ? const SizedBox()
-                              // : Image.asset(returnImage(i)),
                               : Padding(
-                                  padding: EdgeInsets.all(
-                                      MediaQuery.of(context).size.width * 0.05),
-                                  child: getSvgImage(
-                                    imageName: returnImage(i),
-                                    height: double.maxFinite,
-                                    width: double.maxFinite,
-                                    fit: BoxFit.fill,
-                                  ),
-                                ),
+                            padding: EdgeInsets.all(
+                                MediaQuery.of(context).size.width * 0.05),
+                            child: getSvgImage(
+                              imageName: returnImage(i),
+                              height: double.maxFinite,
+                              width: double.maxFinite,
+                              fit: BoxFit.fill,
+                            ),
+                          ),
                         ]),
                       );
                     },
@@ -1402,7 +1423,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
               width: MediaQuery.of(context).size.width,
               child: Padding(
                 padding:
-                    const EdgeInsets.only(left: 20.0, right: 20, bottom: 20),
+                const EdgeInsets.only(left: 20.0, right: 20, bottom: 20),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [

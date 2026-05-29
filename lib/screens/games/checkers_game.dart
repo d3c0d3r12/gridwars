@@ -9,9 +9,6 @@ import '../../screens/splash.dart' show utils;
 import 'game_widgets.dart';
 import '../../screens/arcade_lobby.dart';
 
-// Board: 64 cells. 0=empty,1=p1,2=p2,3=p1king,4=p2king.
-// P1 starts at bottom (rows 5-7), P2 at top (rows 0-2).
-// Only dark squares (r+c)%2==1 are used.
 class CheckersGameScreen extends StatefulWidget {
   final GameArgs args;
   const CheckersGameScreen({super.key, required this.args});
@@ -23,6 +20,7 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
   List<int> _board = List.filled(64, 0);
   int _turn = 1, _selected = -1;
   bool _gameOver = false;
+  bool _disposed = false;
   StreamSubscription? _sub;
   StreamSubscription? _statusSub;
   late int _myNum;
@@ -36,17 +34,17 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
         .child('state')
         .onValue
         .listen((ev) {
-      if (!mounted || ev.snapshot.value == null) return;
+      if (_disposed || !mounted || ev.snapshot.value == null) return;
       final st = Map<String, dynamic>.from(ev.snapshot.value as Map);
-      final board    = List<int>.from((st['board']    as List).map((e) => int.parse(e.toString())));
+      final board    = List<int>.from((st['board'] as List).map((e) => int.parse(e.toString())));
       final turn     = int.parse(st['turn'].toString());
       final selected = int.parse(st['selected'].toString());
       setState(() { _board = board; _turn = turn; _selected = selected; _validMoves = []; });
-      if (!_gameOver) _checkGameOver(board);
+      if (!_gameOver) _checkGameOver(board, turn);
     });
     _statusSub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
         .child('status').onValue.listen((ev) {
-      if (!mounted || _gameOver) return;
+      if (_disposed || !mounted || _gameOver) return;
       if (ev.snapshot.value?.toString() == 'finished') {
         setState(() => _gameOver = true);
         showOpponentLeftDialog(context);
@@ -55,38 +53,77 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
   }
 
   @override
-  void dispose() { _sub?.cancel(); _statusSub?.cancel(); super.dispose(); }
+  void dispose() {
+    _disposed = true;
+    _sub?.cancel();
+    _statusSub?.cancel();
+    super.dispose();
+  }
 
   void _abandonGame() async {
-    if (_gameOver) return;
+    if (_gameOver || _disposed) return;
     setState(() => _gameOver = true);
     _sub?.cancel();
     _statusSub?.cancel();
     await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
-    if (mounted) Navigator.pop(context);
+    if (mounted && !_disposed) Navigator.pop(context);
   }
 
   void _handleExit() => showLeaveConfirmDialog(context, _abandonGame);
 
   bool get _myTurn => _turn == _myNum && !_gameOver;
 
-  void _checkGameOver(List<int> board) {
-    final oppNum = _myNum == 1 ? 2 : 1;
-    final oppPieces = board.where((c) => c == oppNum || c == oppNum + 2).length;
-    if (oppPieces == 0 && _turn != _myNum) {
-      // Opponent has no pieces — we win
-      setState(() => _gameOver = true);
-      _showResult(true);
-    }
+  // FIXED: Correct win detection
+  void _checkGameOver(List<int> board, int turn) {
     final myPieces = board.where((c) => c == _myNum || c == _myNum + 2).length;
-    if (myPieces == 0 && _turn == _myNum) {
-      setState(() => _gameOver = true);
+    final oppPieces = board.where((c) => {
+      if (_myNum == 1) c == 2 || c == 4
+      else c == 1 || c == 3
+    }.contains(c)).length;
+
+    // If I have no pieces, I lose
+    if (myPieces == 0) {
+      _gameOver = true;
       _showResult(false);
+      ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
+      return;
+    }
+
+    // If opponent has no pieces, I win
+    if (oppPieces == 0) {
+      _gameOver = true;
+      _showResult(true);
+      ArcadeService.endGame(widget.args.type, widget.args.gameId, FirebaseAuth.instance.currentUser!.uid, widget.args.entryFee);
+      return;
+    }
+
+    // Check if current player has any valid moves
+    bool hasMoves = false;
+    for (int i = 0; i < 64; i++) {
+      final piece = board[i];
+      final isMyPiece = piece == _turn || piece == _turn + 2;
+      if (isMyPiece && _getMoves(i, board).isNotEmpty) {
+        hasMoves = true;
+        break;
+      }
+    }
+
+    if (!hasMoves) {
+      // No moves available - current player loses
+      if (_turn == _myNum) {
+        _gameOver = true;
+        _showResult(false);
+        ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
+      } else {
+        _gameOver = true;
+        _showResult(true);
+        ArcadeService.endGame(widget.args.type, widget.args.gameId, FirebaseAuth.instance.currentUser!.uid, widget.args.entryFee);
+      }
     }
   }
 
   void _onTap(int idx) async {
-    if (!_myTurn) return;
+    if (!_myTurn || _gameOver) return;
     final cell = _board[idx];
     final ownCell = cell == _myNum || cell == _myNum + 2;
 
@@ -113,8 +150,8 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
     final isKing = piece == 3 || piece == 4;
     final r = from ~/ 8, c = from % 8;
     final dirs = <List<int>>[];
-    if (piece == 1 || isKing) dirs.addAll([[-1,-1],[-1,1]]); // p1 moves up
-    if (piece == 2 || isKing) dirs.addAll([[1,-1],[1,1]]);   // p2 moves down
+    if (piece == 1 || isKing) dirs.addAll([[-1,-1],[-1,1]]);
+    if (piece == 2 || isKing) dirs.addAll([[1,-1],[1,1]]);
 
     final moves = <int>[];
     // Check jumps first
@@ -128,7 +165,7 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
         if ((board[mid]==opp||board[mid]==opp+2) && board[jump]==0) moves.add(jump);
       }
     }
-    if (moves.isNotEmpty) return moves; // Mandatory jump
+    if (moves.isNotEmpty) return moves;
 
     for (final d in dirs) {
       final nr = r + d[0], nc = c + d[1];
@@ -142,7 +179,6 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
     newBoard[to] = newBoard[from];
     newBoard[from] = 0;
 
-    // Check if jump (capture)
     final fromR = from ~/ 8, fromC = from % 8;
     final toR   = to   ~/ 8, toC   = to   % 8;
     if ((fromR - toR).abs() == 2) {
@@ -150,14 +186,12 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
       newBoard[midR*8+midC] = 0;
     }
 
-    // Kinging
     if (newBoard[to] == 1 && toR == 0) newBoard[to] = 3;
     if (newBoard[to] == 2 && toR == 7) newBoard[to] = 4;
 
     music.play(dice);
     final next = _turn == 1 ? 2 : 1;
 
-    // Check if chained jump available
     final chainJumps = _getMoves(to, newBoard).where((m) => (m ~/ 8 - toR).abs() == 2).toList();
     if (chainJumps.isNotEmpty && (fromR - toR).abs() == 2) {
       setState(() { _board = newBoard; _selected = to; _validMoves = chainJumps; });
@@ -170,11 +204,7 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
     await ArcadeService.updateState(widget.args.type, widget.args.gameId,
         {'board': newBoard, 'turn': next, 'selected': -1});
 
-    _checkGameOver(newBoard);
-    if (_gameOver) {
-      await ArcadeService.endGame(widget.args.type, widget.args.gameId,
-          FirebaseAuth.instance.currentUser!.uid, widget.args.entryFee);
-    }
+    _checkGameOver(newBoard, next);
   }
 
   void _showResult(bool won) {
@@ -183,7 +213,10 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
       title: Text(won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: white, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
       content: Text(won ? '+${widget.args.entryFee * 2} coins!' : 'Better luck next time', style: TextStyle(color: secondarySelectedColor), textAlign: TextAlign.center),
-      actions: [TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
+      actions: [TextButton(onPressed: () {
+        if (Navigator.canPop(context)) Navigator.pop(context);
+        if (Navigator.canPop(context)) Navigator.pop(context);
+      }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
     ));
   }
 
@@ -193,50 +226,49 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
     final oppColor = widget.args.isP1 ? const Color(0xFFFFECB3) : const Color(0xFFE53935);
 
     return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) { if (!didPop) _handleExit(); },
-      child: Scaffold(
-      body: Container(
-        decoration: utils.gradBack(),
-        child: SafeArea(child: Column(children: [
-          gameHeader(context, 'CHECKERS', _myTurn ? 'Your Turn' : "${widget.args.oppName}'s Turn", 0, 0, onExit: _handleExit),
-          const SizedBox(height: 6),
-          if (_myTurn && _selected == -1) gamePill('Tap your piece to select, then tap to move', myColor),
-          if (_myTurn && _selected != -1) gamePill('Tap destination (highlighted)', secondarySelectedColor),
-          if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName} is thinking…", white.withValues(alpha: 0.5)),
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) { if (!didPop && !_disposed) _handleExit(); },
+        child: Scaffold(
+          body: Container(
+            decoration: utils.gradBack(),
+            child: SafeArea(child: Column(children: [
+              gameHeader(context, 'CHECKERS', _myTurn ? 'Your Turn' : "${widget.args.oppName}'s Turn", 0, 0, onExit: _handleExit),
+              const SizedBox(height: 6),
+              if (_myTurn && _selected == -1) gamePill('Tap your piece to select, then tap to move', myColor),
+              if (_myTurn && _selected != -1) gamePill('Tap destination (highlighted)', secondarySelectedColor),
+              if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName} is thinking…", white.withValues(alpha: 0.5)),
 
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: AspectRatio(aspectRatio: 1,
-                child: GestureDetector(
-                  onTapUp: (det) {
-                    final size = context.size?.width ?? 300;
-                    final cs = (size - 24) / 8;
-                    final col = (det.localPosition.dx / cs).floor().clamp(0, 7);
-                    // Flip board for player 2
-                    final rawRow = (det.localPosition.dy / cs).floor().clamp(0, 7);
-                    final row = widget.args.isP1 ? rawRow : 7 - rawRow;
-                    _onTap(row * 8 + col);
-                  },
-                  child: CustomPaint(
-                    painter: _CheckersPainter(_board, _selected, _validMoves, widget.args.isP1, myColor, oppColor),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: AspectRatio(aspectRatio: 1,
+                    child: GestureDetector(
+                      onTapUp: (det) {
+                        final size = MediaQuery.of(context).size.width - 24;
+                        final cs = size / 8;
+                        final col = (det.localPosition.dx / cs).floor().clamp(0, 7);
+                        final rawRow = (det.localPosition.dy / cs).floor().clamp(0, 7);
+                        final row = widget.args.isP1 ? rawRow : 7 - rawRow;
+                        _onTap(row * 8 + col);
+                      },
+                      child: CustomPaint(
+                        painter: _CheckersPainter(_board, _selected, _validMoves, widget.args.isP1, myColor, oppColor),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
 
-          Padding(padding: const EdgeInsets.only(bottom: 12),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              _dot(myColor), const SizedBox(width: 4), Text('You', style: TextStyle(color: white, fontSize: 12)),
-              const SizedBox(width: 20),
-              _dot(oppColor), const SizedBox(width: 4), Text(widget.args.oppName, style: TextStyle(color: white, fontSize: 12)),
+              Padding(padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    _dot(myColor), const SizedBox(width: 4), Text('You', style: TextStyle(color: white, fontSize: 12)),
+                    const SizedBox(width: 20),
+                    _dot(oppColor), const SizedBox(width: 4), Text(widget.args.oppName, style: TextStyle(color: white, fontSize: 12)),
+                  ])),
             ])),
-        ])),
-      ),
-      ), // Scaffold
-    ); // PopScope
+          ),
+        )),
+    );
   }
 
   Widget _dot(Color c) => Container(width: 14, height: 14, decoration: BoxDecoration(shape: BoxShape.circle, color: c));
@@ -258,13 +290,10 @@ class _CheckersPainter extends CustomPainter {
         final drawR = isP1 ? r : 7 - r;
         final isDark = (r + c) % 2 == 1;
         final idx = r * 8 + c;
-        // Square
         canvas.drawRect(Rect.fromLTWH(c * cs, drawR * cs, cs, cs),
             Paint()..color = isDark ? const Color(0xFF795548) : const Color(0xFFD7CCC8));
-        // Highlight
         if (idx == selected) canvas.drawRect(Rect.fromLTWH(c*cs, drawR*cs, cs, cs), Paint()..color = Colors.yellow.withValues(alpha: 0.35));
         if (validMoves.contains(idx)) canvas.drawRect(Rect.fromLTWH(c*cs, drawR*cs, cs, cs), Paint()..color = Colors.green.withValues(alpha: 0.35));
-        // Piece
         if (board[idx] != 0) {
           final piece = board[idx];
           final color = (isP1 ? piece == 1 || piece == 3 : piece == 2 || piece == 4) ? myColor : oppColor;

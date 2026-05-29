@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
 import '../../helpers/color.dart';
 
-// Header used by all arcade game screens.
-// onExit: called when the user taps the close icon (handles cleanup).
 Widget gameHeader(
-  BuildContext ctx,
-  String title,
-  String sub,
-  int myScore,
-  int oppScore, {
-  VoidCallback? onExit,
-}) {
+    BuildContext ctx,
+    String title,
+    String sub,
+    int myScore,
+    int oppScore, {
+      VoidCallback? onExit,
+    }) {
   return Padding(
     padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
     child: Row(children: [
       GestureDetector(
-        onTap: onExit ?? () => Navigator.pop(ctx),
+        onTap: onExit ?? () {
+          if (Navigator.canPop(ctx)) Navigator.pop(ctx);
+        },
         child: Icon(Icons.close, color: white.withValues(alpha: 0.7)),
       ),
       const Spacer(),
@@ -52,23 +52,26 @@ void showGameResult(BuildContext context, bool won, int entryFee) {
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
     title: Text(won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: white, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
     content: Text(won ? '+${entryFee * 2} coins!' : 'Better luck next time', style: TextStyle(color: secondarySelectedColor, fontSize: 16), textAlign: TextAlign.center),
-    actions: [TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
+    actions: [TextButton(onPressed: () {
+      if (Navigator.canPop(context)) Navigator.pop(context);
+      if (Navigator.canPop(context)) Navigator.pop(context);
+    }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
   ));
 }
 
-// Shown when opponent abandons mid-game.
 void showOpponentLeftDialog(BuildContext context) {
   showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
     backgroundColor: secondaryColor,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4))),
     title: Text('🏆 You Win!', style: TextStyle(color: white, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
     content: Text('Opponent left the game.', style: TextStyle(color: secondarySelectedColor, fontSize: 15), textAlign: TextAlign.center),
-    actions: [TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
+    actions: [TextButton(onPressed: () {
+      if (Navigator.canPop(context)) Navigator.pop(context);
+      if (Navigator.canPop(context)) Navigator.pop(context);
+    }, child: Text('Back', style: TextStyle(color: secondarySelectedColor)))],
   ));
 }
 
-// Confirmation dialog before leaving a live game.
-// Calls onConfirm if the user agrees to abandon.
 void showLeaveConfirmDialog(BuildContext context, VoidCallback onConfirm) {
   showDialog(context: context, barrierDismissible: true, builder: (_) => AlertDialog(
     backgroundColor: secondaryColor,
@@ -78,7 +81,10 @@ void showLeaveConfirmDialog(BuildContext context, VoidCallback onConfirm) {
     actions: [
       TextButton(onPressed: () => Navigator.pop(context), child: Text('Stay', style: TextStyle(color: secondarySelectedColor))),
       TextButton(
-        onPressed: () { Navigator.pop(context); onConfirm(); },
+        onPressed: () {
+          Navigator.pop(context);
+          onConfirm();
+        },
         child: Text('Leave', style: TextStyle(color: red)),
       ),
     ],

@@ -36,7 +36,6 @@ class _PrivateRoomScreenState extends State<PrivateRoomScreen> with SingleTicker
       body: Container(
         decoration: utils.gradBack(),
         child: SafeArea(child: Column(children: [
-          // Header
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             child: Row(children: [
@@ -48,7 +47,6 @@ class _PrivateRoomScreenState extends State<PrivateRoomScreen> with SingleTicker
             ]),
           ),
 
-          // Tab bar
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
             decoration: BoxDecoration(
@@ -104,8 +102,12 @@ class _CreateRoomState extends State<_CreateRoom> {
   }
 
   Future<void> _loadSkins() async {
-    _imagex = await utils.getSkinValue("user_skin");
-    _imageo = await utils.getSkinValue("opponent_skin");
+    String? x = await utils.getSkinValue("user_skin");
+    String? o = await utils.getSkinValue("opponent_skin");
+    setState(() {
+      _imagex = x ?? 'cross_skin';
+      _imageo = o ?? 'circle_skin';
+    });
   }
 
   @override
@@ -123,13 +125,21 @@ class _CreateRoomState extends State<_CreateRoom> {
   Future<void> _createRoom() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
+
     final db = FirebaseDatabase.instance;
     final code = _generateCode();
 
-    // Create the game node
     final gameRef = db.ref().child('Game').push();
     final gameKey = gameRef.key!;
     final firstTry = Random().nextBool() ? 'player1' : 'player2';
+
+    // Deduct entry fee from host immediately
+    try {
+      await db.ref().child('users').child(uid).child('coin').runTransaction((v) => Transaction.success((v as int? ?? 0) - fixedEntryFee));
+    } catch (e) {
+      utils.setSnackbar(context, 'Insufficient coins to create room!');
+      return;
+    }
 
     await gameRef.set({
       'player1': {'id': uid, 'won': 0},
@@ -141,7 +151,6 @@ class _CreateRoomState extends State<_CreateRoom> {
       'time': DateTime.now().toUtc().toString(),
     });
 
-    // Register private lobby
     await db.ref().child('privateLobbies').child(code).set({
       'gameKey': gameKey,
       'hostUid': uid,
@@ -150,35 +159,54 @@ class _CreateRoomState extends State<_CreateRoom> {
 
     setState(() { _code = code; _gameKey = gameKey; _waiting = true; });
 
-    // Listen for opponent to join
     _sub = db.ref().child('privateLobbies').child(code).child('status').onValue.listen((ev) async {
       if (ev.snapshot.value == 'ready' && mounted) {
         _sub?.cancel();
-        setState(() { _found = true; _waiting = false; });
-        await _loadAndNavigate(code, gameKey, uid, isHost: true);
+
+        // Wait a moment for player2 data to be fully written
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        if (mounted) {
+          setState(() { _found = true; _waiting = false; });
+          await _loadAndNavigate(code, gameKey, uid, isHost: true);
+        }
       }
     });
   }
 
   Future<void> _loadAndNavigate(String code, String gameKey, String uid, {required bool isHost}) async {
     final db = FirebaseDatabase.instance;
-    final lobbySnap = await db.ref().child('privateLobbies').child(code).once();
-    final lobbyData = lobbySnap.snapshot.value as Map;
 
-    String? oppUid;
-    if (isHost) {
-      final p2Snap = await db.ref().child('Game').child(gameKey).child('player2').once();
-      oppUid = (p2Snap.snapshot.value as Map?)?['id'];
-    } else {
-      oppUid = lobbyData['hostUid'];
-    }
+    String oppUid;
+    String oppName = 'Opponent';
+    String oppPic = guestProfilePic;
 
-    String oppName = 'Opponent', oppPic = guestProfilePic;
-    if (oppUid != null) {
-      final u = await db.ref().child('users').child(oppUid).once();
-      final m = u.snapshot.value as Map?;
-      oppName = m?['username'] ?? 'Opponent';
-      oppPic  = m?['profilePic'] ?? guestProfilePic;
+    try {
+      if (isHost) {
+        final p2Snap = await db.ref().child('Game').child(gameKey).child('player2').once();
+        final p2Data = p2Snap.snapshot.value;
+        if (p2Data is Map && p2Data.containsKey('id')) {
+          oppUid = p2Data['id'] as String;
+        } else {
+          // Fallback: get from lobby
+          final lobbySnap = await db.ref().child('privateLobbies').child(code).once();
+          final lobbyData = lobbySnap.snapshot.value as Map;
+          oppUid = lobbyData['hostUid'] as String;
+        }
+      } else {
+        final lobbySnap = await db.ref().child('privateLobbies').child(code).once();
+        final lobbyData = lobbySnap.snapshot.value as Map;
+        oppUid = lobbyData['hostUid'] as String;
+      }
+
+      if (oppUid != null) {
+        final u = await db.ref().child('users').child(oppUid).once();
+        final m = u.snapshot.value as Map?;
+        oppName = m?['username'] ?? 'Opponent';
+        oppPic = m?['profilePic'] ?? guestProfilePic;
+      }
+    } catch (e) {
+      // Keep defaults
     }
 
     final gameSnap = await db.ref().child('Game').child(gameKey).once();
@@ -188,6 +216,7 @@ class _CreateRoomState extends State<_CreateRoom> {
     final firstUid = firstUidSnap.snapshot.value;
 
     if (!mounted) return;
+
     Navigator.pushReplacement(context, CupertinoPageRoute(builder: (_) => MultiplayerScreen(
       gameKey: gameKey,
       firstTry: uid == firstUid,
@@ -204,6 +233,7 @@ class _CreateRoomState extends State<_CreateRoom> {
     _sub?.cancel();
     if (_gameKey != null) {
       await FirebaseDatabase.instance.ref().child('Game').child(_gameKey!).update({'status': 'closed'});
+      await FirebaseDatabase.instance.ref().child('Game').child(_gameKey!).remove();
     }
     if (_code != null) {
       await FirebaseDatabase.instance.ref().child('privateLobbies').child(_code!).remove();
@@ -233,45 +263,44 @@ class _CreateRoomState extends State<_CreateRoom> {
       ]));
     }
 
-    // Waiting state — intercept back to auto-cancel the room.
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _cancelRoom();
       },
       child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Text('Share this code', style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 14)),
-      const SizedBox(height: 12),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          color: secondaryColor,
-          border: Border.all(color: secondarySelectedColor.withValues(alpha: 0.5), width: 2),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text(_code!, style: TextStyle(color: secondarySelectedColor, fontSize: 34, fontWeight: FontWeight.bold, letterSpacing: 8)),
-          const SizedBox(width: 12),
-          GestureDetector(
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: _code!));
-              utils.setSnackbar(context, 'Code copied!');
-            },
-            child: Icon(Icons.copy_rounded, color: secondarySelectedColor.withValues(alpha: 0.7)),
-          ),
-        ]),
-      ),
-      const SizedBox(height: 24),
-      if (_waiting) ...[
-        SizedBox(width: 28, height: 28, child: CircularProgressIndicator(color: secondarySelectedColor, strokeWidth: 2.5)),
+        Text('Share this code', style: TextStyle(color: white.withValues(alpha: 0.6), fontSize: 14)),
         const SizedBox(height: 12),
-        Text('Waiting for opponent…', style: TextStyle(color: white.withValues(alpha: 0.6))),
-        const SizedBox(height: 20),
-        TextButton(onPressed: _cancelRoom, child: Text('Cancel', style: TextStyle(color: red))),
-      ],
-      if (_found) Text('Opponent found! Loading game…', style: TextStyle(color: Colors.greenAccent)),
-    ])),
-    ); // PopScope
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: secondaryColor,
+            border: Border.all(color: secondarySelectedColor.withValues(alpha: 0.5), width: 2),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(_code!, style: TextStyle(color: secondarySelectedColor, fontSize: 34, fontWeight: FontWeight.bold, letterSpacing: 8)),
+            const SizedBox(width: 12),
+            GestureDetector(
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: _code!));
+                utils.setSnackbar(context, 'Code copied!');
+              },
+              child: Icon(Icons.copy_rounded, color: secondarySelectedColor.withValues(alpha: 0.7)),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 24),
+        if (_waiting) ...[
+          SizedBox(width: 28, height: 28, child: CircularProgressIndicator(color: secondarySelectedColor, strokeWidth: 2.5)),
+          const SizedBox(height: 12),
+          Text('Waiting for opponent…', style: TextStyle(color: white.withValues(alpha: 0.6))),
+          const SizedBox(height: 20),
+          TextButton(onPressed: _cancelRoom, child: Text('Cancel', style: TextStyle(color: red))),
+        ],
+        if (_found) Text('Opponent found! Loading game…', style: TextStyle(color: Colors.greenAccent)),
+      ])),
+    );
   }
 }
 
@@ -296,8 +325,12 @@ class _JoinRoomState extends State<_JoinRoom> {
   }
 
   Future<void> _loadSkins() async {
-    _imagex = await utils.getSkinValue("user_skin");
-    _imageo = await utils.getSkinValue("opponent_skin");
+    String? x = await utils.getSkinValue("user_skin");
+    String? o = await utils.getSkinValue("opponent_skin");
+    setState(() {
+      _imagex = x ?? 'cross_skin';
+      _imageo = o ?? 'circle_skin';
+    });
   }
 
   @override
@@ -309,7 +342,10 @@ class _JoinRoomState extends State<_JoinRoom> {
 
     setState(() { _loading = true; _error = ''; });
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      setState(() { _loading = false; _error = 'Please login first'; });
+      return;
+    }
 
     final db = FirebaseDatabase.instance;
     final lobbySnap = await db.ref().child('privateLobbies').child(code).once();
@@ -321,7 +357,6 @@ class _JoinRoomState extends State<_JoinRoom> {
 
     final lobby = lobbySnap.snapshot.value as Map;
 
-    // Prevent joining your own room
     if (lobby['hostUid'] == uid) {
       setState(() { _loading = false; _error = 'This is your own room — share the code with a friend!'; });
       return;
@@ -333,26 +368,39 @@ class _JoinRoomState extends State<_JoinRoom> {
     }
 
     final gameKey = lobby['gameKey'] as String;
-    final hostUid  = lobby['hostUid'] as String;
+    final hostUid = lobby['hostUid'] as String;
 
-    // Join the game — single atomic multi-path write so the host's status
-    // listener always sees player2.id already set when it fires.
-    await db.ref().update({
-      'Game/$gameKey/player2/id': uid,
-      'Game/$gameKey/player2/won': 0,
-      'Game/$gameKey/status': 'preparing',
-      'privateLobbies/$code/status': 'ready',
-    });
+    // Check if user has enough coins
+    final userCoinSnap = await db.ref().child('users').child(uid).child('coin').once();
+    final userCoins = userCoinSnap.snapshot.value as int? ?? 0;
+    if (userCoins < fixedEntryFee) {
+      setState(() { _loading = false; _error = 'Insufficient coins to join! Need $fixedEntryFee coins.'; });
+      return;
+    }
 
-    // Deduct entry fee
-    await db.ref().child('users').child(uid).child('coin').runTransaction((v) => Transaction.success((v as int? ?? 0) - fixedEntryFee));
+    try {
+      await db.ref().update({
+        'Game/$gameKey/player2/id': uid,
+        'Game/$gameKey/player2/won': 0,
+        'Game/$gameKey/status': 'preparing',
+        'privateLobbies/$code/status': 'ready',
+      });
+
+      await db.ref().child('users').child(uid).child('coin').runTransaction((v) => Transaction.success((v as int? ?? 0) - fixedEntryFee));
+
+      // Wait a moment for host to detect the change
+      await Future.delayed(const Duration(milliseconds: 500));
+    } catch (e) {
+      setState(() { _loading = false; _error = 'Failed to join room. Please try again.'; });
+      return;
+    }
 
     // Fetch host info
     String oppName = 'Host', oppPic = guestProfilePic;
     final hostSnap = await db.ref().child('users').child(hostUid).once();
     final hMap = hostSnap.snapshot.value as Map?;
     oppName = hMap?['username'] ?? 'Host';
-    oppPic  = hMap?['profilePic'] ?? guestProfilePic;
+    oppPic = hMap?['profilePic'] ?? guestProfilePic;
 
     final gameSnap = await db.ref().child('Game').child(gameKey).once();
     final gMap = gameSnap.snapshot.value as Map;
@@ -361,6 +409,7 @@ class _JoinRoomState extends State<_JoinRoom> {
     final firstUid = firstUidSnap.snapshot.value;
 
     if (!mounted) return;
+
     Navigator.pushReplacement(context, CupertinoPageRoute(builder: (_) => MultiplayerScreen(
       gameKey: gameKey,
       firstTry: uid == firstUid,
