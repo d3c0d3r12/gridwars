@@ -11,18 +11,15 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'helpers/color.dart';
 import 'helpers/constant.dart';
 
-/// [1.1.3] - GridWars
 /// Compatible with Flutter [3.35.7]
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
-  if (Firebase.apps.isNotEmpty) {
+  if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-  } else {
-    await Firebase.initializeApp();
   }
 
   runApp(MyApp());

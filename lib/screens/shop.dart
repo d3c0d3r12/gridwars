@@ -389,8 +389,7 @@ class _ShopActivityState extends State<ShopActivity> {
 
   createRewardedAd() async {
     if (wantGoogleAd) {
-      MobileAds.instance.updateRequestConfiguration(RequestConfiguration(
-          testDeviceIds: ["76E93F010B591E281F371BEB6B05C0E0"]));
+      MobileAds.instance.updateRequestConfiguration(RequestConfiguration());
       RewardedAd.load(
           adUnitId: rewardedAdID,
           request: AdRequest(),

@@ -9,6 +9,7 @@ import '../helpers/color.dart';
 import '../helpers/constant.dart';
 import '../helpers/string.dart';
 import '../helpers/utils.dart';
+import '../widgets/xo_logo.dart';
 import '../functions/dialoges.dart';
 import '../functions/findGame.dart';
 import '../functions/getCoin.dart';
@@ -45,6 +46,7 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
   var firstuid;
 
   StreamSubscription<DatabaseEvent>? listen;
+  final Map<String, StreamSubscription> _fieldSubs = {};
   late ValueNotifier oppositPlayerName;
   late ValueNotifier keyOfGame;
   bool canPlayGame = false;
@@ -85,29 +87,18 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
     });
   }
 
-  getFieldValue(
+  void getFieldValue(
     String fieldName,
     void Function(dynamic count) callback,
     void Function(dynamic count) update,
-  ) async {
-    var init;
-    try {
-      var ins = GetUserInfo();
-      init = await (await ins.getFieldValue(fieldName));
-      if (mounted) {
-        setState(() {
-          callback(init);
-        });
-      }
-
-      await ins.detectChange(fieldName, (val) {
-        if (mounted) {
-          setState(() {
-            update(val);
-          });
-        }
-      });
-    } catch (err) {}
+  ) {
+    GetUserInfo().getFieldValue(fieldName).then((init) {
+      if (mounted) setState(() => callback(init));
+    }).catchError((_) {});
+    _fieldSubs[fieldName]?.cancel();
+    _fieldSubs[fieldName] = GetUserInfo().detectChange(fieldName, (val) {
+      if (mounted) setState(() => update(val));
+    });
   }
 
   Future<void> getImage() async {
@@ -303,9 +294,8 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
   void dispose() {
     t?.cancel();
     oppTimer?.cancel();
-
     listen?.cancel();
-
+    for (final sub in _fieldSubs.values) { sub.cancel(); }
     super.dispose();
   }
 
@@ -343,8 +333,18 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            getSvgImage(
-                                imageName: img, width: 123, height: 137),
+                            Container(
+                              width: 123,
+                              height: 123,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(
+                                  color: secondarySelectedColor.withValues(alpha: img == "dora_oppentfind" ? 0.5 : 0.2),
+                                  blurRadius: 30, spreadRadius: 6,
+                                )],
+                              ),
+                              child: const XOBattleLogo(size: 123),
+                            ),
                             Padding(
                               padding: const EdgeInsets.only(top: 18.0),
                               child: Text(oppMsg),

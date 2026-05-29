@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:xobattle/functions/ai.dart';
+import 'package:xobattle/widgets/xo_logo.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:circular_countdown_timer/circular_countdown_timer.dart';
 import 'package:flutter/material.dart';
 
@@ -17,10 +19,12 @@ import 'splash.dart';
 class SinglePlayerScreenActivity extends StatefulWidget {
   String? playerSkin, doraSkin;
   final int? levelType;
-  final String matrixSize; // Add the matrixSize parameter
+  final String matrixSize;
+  final int timerSeconds;
 
   SinglePlayerScreenActivity(
-      this.playerSkin, this.doraSkin, this.levelType, this.matrixSize);
+      this.playerSkin, this.doraSkin, this.levelType, this.matrixSize,
+      {this.timerSeconds = 60});
 
   @override
   _SinglePlayerScreenActivityState createState() =>
@@ -37,7 +41,7 @@ class _SinglePlayerScreenActivityState
 
   void _startTimer() {
     _stopTimer();
-    _timerNotifier.value = countdowntime;
+    _timerNotifier.value = widget.timerSeconds;
     _gameTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) { t.cancel(); return; }
       if (_timerNotifier.value <= 0) {
@@ -70,6 +74,7 @@ class _SinglePlayerScreenActivityState
 
   String? player;
   TicTacToeAI doraAI = TicTacToeAI();
+  int _consecutiveDraws = 0;
 
   String gameStatus = "";
 
@@ -174,20 +179,36 @@ class _SinglePlayerScreenActivityState
     // If all boxes are filled and no winner, declare a tie
     if (_count == totalBoxes && winner == "0") {
       gameStatus = "tie";
-      _stopTimer(); // Stop timer on tie
+      _stopTimer();
       tieCalled += 1;
-      if (mounted) {
-        setState(() {});
-      }
+      _consecutiveDraws++;
+      if (mounted) setState(() {});
 
-      // Play tie game sound
       music.play(tiegame);
 
-      Future.delayed(const Duration(seconds: 1)).then((value) {
-        if (winner == "0" && gameStatus == "tie") {
+      Future.delayed(const Duration(seconds: 1)).then((_) async {
+        if (!mounted || winner != "0" || gameStatus != "tie") return;
+        _countDownPlayer.pause();
+
+        if (_consecutiveDraws >= 2) {
+          // Trigger Sudden Death
+          await Dialogue.suddenDeath(context);
+          if (!mounted) return;
+          Navigator.pushReplacement(
+            context,
+            CupertinoPageRoute(
+              builder: (_) => SinglePlayerScreenActivity(
+                widget.playerSkin,
+                widget.doraSkin,
+                widget.levelType,
+                widget.matrixSize,
+                timerSeconds: blitzCountdown,
+              ),
+            ),
+          );
+        } else {
           Dialogue().tie(context, "Singleplayer", "", "", widget.playerSkin,
               widget.doraSkin, widget.levelType, widget.matrixSize);
-          _countDownPlayer.pause();
           setState(() {});
         }
       });
@@ -228,131 +249,30 @@ class _SinglePlayerScreenActivityState
       if (player == "X") {
         await Future.delayed(Duration(milliseconds: seconds * 500))
             .then((_) async {
-          if (!mounted) {
-            return;
-          }
-          var currentBoardState = [];
-          Set<int> remainingSpots = {};
+          if (!mounted) return;
 
-          int j = 0;
-          var r;
+          final int boardSize = widget.matrixSize == "Four"
+              ? 4
+              : widget.matrixSize == "Five"
+                  ? 5
+                  : 3;
+          final int totalCells = boardSize * boardSize;
 
-          if (widget.matrixSize == "Four") {
-            for (var i = 0; i <= 15; i++) {
-              if (buttons[i]["state"] == "") {
-                currentBoardState.add(i);
-                remainingSpots.add(i);
-                j++;
-              } else if (buttons[i]["player"] == "2") {
-                currentBoardState.add("X"); // Dora = X
-              } else if (buttons[i]["player"] == "1") {
-                currentBoardState.add("O"); // Human = O
-              }
-            }
+          final List currentBoardState = List.generate(totalCells, (i) {
+            if (buttons[i]["state"] == "") return i;
+            return buttons[i]["player"] == "2" ? "X" : "O";
+          });
 
-            if (widget.levelType == 2) {
-              if (j <= 15) {
-                r = doraAI.getBestMove(
-                    u.generateBoardSublist(u.filterBoard(currentBoardState), 4),
-                    4);
-              } else {
-                rnd = Random();
-                r = remainingSpots
-                    .elementAt(rnd.nextInt(remainingSpots.length));
-              }
-            } else if (widget.levelType == 1) {
-              if (j <= 6) {
-                r = doraAI.getBestMove(
-                    u.generateBoardSublist(u.filterBoard(currentBoardState), 4),
-                    4);
-              } else {
-                rnd = Random();
-                r = remainingSpots
-                    .elementAt(rnd.nextInt(remainingSpots.length));
-              }
-            } else {
-              rnd = Random();
-              r = remainingSpots.elementAt(rnd.nextInt(remainingSpots.length));
-            }
-          } else if (widget.matrixSize == "Three") {
-            for (var i = 0; i <= 8; i++) {
-              if (buttons[i]["state"] == "") {
-                currentBoardState.add(i);
-                remainingSpots.add(i);
-                j++;
-              } else if (buttons[i]["player"] == "2") {
-                currentBoardState.add("X"); // Dora = X
-              } else if (buttons[i]["player"] == "1") {
-                currentBoardState.add("O"); // Human = O
-              }
-            }
+          final int r = doraAI.getBestMove(
+              currentBoardState, boardSize, widget.levelType ?? 0);
 
-            if (widget.levelType == 2) {
-              if (j <= 8) {
-                var bestSpot = minimax(currentBoardState, "X"); // Dora = "X" (maximizer)
-                r = bestSpot["index"];
-              } else {
-                rnd = Random();
-                r = remainingSpots
-                    .elementAt(rnd.nextInt(remainingSpots.length));
-              }
-            } else if (widget.levelType == 1) {
-              if (j <= 6) {
-                var bestSpot = minimax(currentBoardState, "X"); // Dora = "X" (maximizer)
-                r = bestSpot["index"];
-              } else {
-                rnd = Random();
-                r = remainingSpots
-                    .elementAt(rnd.nextInt(remainingSpots.length));
-              }
-            } else {
-              rnd = Random();
-              r = remainingSpots.elementAt(rnd.nextInt(remainingSpots.length));
-            }
-          } else if (widget.matrixSize == "Five") {
-            for (var i = 0; i <= 24; i++) {
-              if (buttons[i]["state"] == "") {
-                currentBoardState.add(i);
-                remainingSpots.add(i);
-                j++;
-              } else if (buttons[i]["player"] == "2") {
-                currentBoardState.add("X"); // Dora = X
-              } else if (buttons[i]["player"] == "1") {
-                currentBoardState.add("O"); // Human = O
-              }
-            }
-            if (widget.levelType == 2) {
-              if (j <= 24) {
-                r = doraAI.getBestMove(
-                    u.generateBoardSublist(u.filterBoard(currentBoardState), 5),
-                    5);
-              } else {
-                rnd = Random();
-                r = remainingSpots
-                    .elementAt(rnd.nextInt(remainingSpots.length));
-              }
-            } else if (widget.levelType == 1) {
-              if (j <= 14) {
-                r = doraAI.getBestMove(
-                    u.generateBoardSublist(u.filterBoard(currentBoardState), 5),
-                    5);
-              } else {
-                rnd = Random();
-                r = remainingSpots
-                    .elementAt(rnd.nextInt(remainingSpots.length));
-              }
-            } else {
-              rnd = Random();
-              r = remainingSpots.elementAt(rnd.nextInt(remainingSpots.length));
-            }
-          }
-          if (buttons[r]["state"] == "") {
+          if (r >= 0 && r < totalCells && buttons[r]["state"] == "") {
             music.play(dice);
 
             buttons[r]["state"] = "true";
             buttons[r]["player"] = "2";
 
-            _countDownPlayer.restart(duration: countdowntime); // Visual timer
+            _countDownPlayer.restart(duration: widget.timerSeconds); // Visual timer
             _startTimer(); // Custom reliable timer starts for human's turn
             currentMove = utils.getTranslated(context, "yourTurn");
 
@@ -362,11 +282,7 @@ class _SinglePlayerScreenActivityState
             }
             setState(() {});
           } else {
-            if (gameStatus == "started") {
-              if (mounted) {
-                playGame();
-              }
-            }
+            if (gameStatus == "started" && mounted) playGame();
           }
         });
         if (gameStatus == "started") {
@@ -399,281 +315,6 @@ class _SinglePlayerScreenActivityState
     }
   }
 
-  var dora = "X", human = "O";
-  var count = 0;
-  dynamic minimax(newBoard, player) {
-    var availableSpots = [];
-
-    if (widget.matrixSize == "Three") {
-      for (var i = 0; i <= 8; i++) {
-        if (newBoard[i] != "X" && newBoard[i] != "O") {
-          availableSpots.add(i);
-        }
-      }
-      if (checkWinning(newBoard, dora)) {
-        return {"score": 10};
-      } else if (checkWinning(newBoard, human)) {
-        return {"score": -10};
-      } else if (availableSpots.isEmpty) {
-        return {"score": 0};
-      }
-
-      var moves = [];
-
-      for (var i = 0; i < availableSpots.length; i++) {
-        var move = {};
-        move["index"] = newBoard[availableSpots[i]];
-
-        newBoard[availableSpots[i]] = player;
-        if (player == dora) {
-          var result = minimax(newBoard, human);
-
-          move["score"] = result["score"];
-        } else {
-          var result = minimax(newBoard, dora);
-
-          move["score"] = result["score"];
-        }
-        newBoard[availableSpots[i]] = move["index"];
-        moves.add(move);
-      }
-
-      var bestmove;
-
-      if (player == dora) {
-        var bestscore = -10000;
-        for (var i = 0; i < moves.length; i++) {
-          if (moves[i]["score"] > bestscore) {
-            bestscore = moves[i]["score"];
-            bestmove = i;
-          }
-        }
-      } else {
-        var bestscore = 10000;
-        for (var i = 0; i < moves.length; i++) {
-          if (moves[i]["score"] < bestscore) {
-            bestscore = moves[i]["score"];
-            bestmove = i;
-          }
-        }
-      }
-      return moves[bestmove];
-    } else if (widget.matrixSize == "Four") {
-      for (var i = 0; i <= 15; i++) {
-        if (newBoard[i] != "X" && newBoard[i] != "O") {
-          availableSpots.add(i);
-        }
-      }
-      if (checkWinningFour(newBoard, dora)) {
-        return {"score": 10};
-      } else if (checkWinningFour(newBoard, human)) {
-        return {"score": -10};
-      } else if (availableSpots.isEmpty) {
-        return {"score": 0};
-      }
-
-      var moves = [];
-
-      for (var i = 0; i < availableSpots.length; i++) {
-        var move = {};
-        move["index"] = newBoard[availableSpots[i]];
-
-        newBoard[availableSpots[i]] = player;
-        if (player == dora) {
-          var result = minimax(newBoard, human);
-
-          move["score"] = result["score"];
-        } else {
-          var result = minimax(newBoard, dora);
-
-          move["score"] = result["score"];
-        }
-        newBoard[availableSpots[i]] = move["index"];
-        moves.add(move);
-      }
-      var bestmove;
-
-      if (player == dora) {
-        var bestscore = -10000;
-        for (var i = 0; i < moves.length; i++) {
-          if (moves[i]["score"] > bestscore) {
-            bestscore = moves[i]["score"];
-            bestmove = i;
-          }
-        }
-      } else {
-        var bestscore = 10000;
-        for (var i = 0; i < moves.length; i++) {
-          if (moves[i]["score"] < bestscore) {
-            bestscore = moves[i]["score"];
-            bestmove = i;
-          }
-        }
-      }
-      return moves[bestmove];
-    } else if (widget.matrixSize == "Five") {
-      for (var i = 0; i <= 24; i++) {
-        if (newBoard[i] != "X" && newBoard[i] != "O") {
-          availableSpots.add(i);
-        }
-      }
-      if (checkWinningFive(newBoard, dora)) {
-        return {"score": 10};
-      } else if (checkWinningFive(newBoard, human)) {
-        return {"score": -10};
-      } else if (availableSpots.isEmpty) {
-        return {"score": 0};
-      }
-
-      var moves = [];
-
-      for (var i = 0; i < availableSpots.length; i++) {
-        var move = {};
-        move["index"] = newBoard[availableSpots[i]];
-
-        newBoard[availableSpots[i]] = player;
-        if (player == dora) {
-          var result = minimax(newBoard, human);
-
-          move["score"] = result["score"];
-        } else {
-          var result = minimax(newBoard, dora);
-
-          move["score"] = result["score"];
-        }
-        newBoard[availableSpots[i]] = move["index"];
-        moves.add(move);
-      }
-
-      var bestmove;
-
-      if (player == dora) {
-        var bestscore = -10000;
-        for (var i = 0; i < moves.length; i++) {
-          if (moves[i]["score"] > bestscore) {
-            bestscore = moves[i]["score"];
-            bestmove = i;
-          }
-        }
-      } else {
-        var bestscore = 10000;
-        for (var i = 0; i < moves.length; i++) {
-          if (moves[i]["score"] < bestscore) {
-            bestscore = moves[i]["score"];
-            bestmove = i;
-          }
-        }
-      }
-      return moves[bestmove];
-    }
-  }
-
-  bool checkWinningFour(board, player) {
-    // Check horizontal lines
-    if ((board[0] == player &&
-            board[1] == player &&
-            board[2] == player &&
-            board[3] == player) ||
-        (board[4] == player &&
-            board[5] == player &&
-            board[6] == player &&
-            board[7] == player) ||
-        (board[8] == player &&
-            board[9] == player &&
-            board[10] == player &&
-            board[11] == player) ||
-        (board[12] == player &&
-            board[13] == player &&
-            board[14] == player &&
-            board[15] == player) ||
-
-        // Check vertical lines
-        (board[0] == player &&
-            board[4] == player &&
-            board[8] == player &&
-            board[12] == player) ||
-        (board[1] == player &&
-            board[5] == player &&
-            board[9] == player &&
-            board[13] == player) ||
-        (board[2] == player &&
-            board[6] == player &&
-            board[10] == player &&
-            board[14] == player) ||
-        (board[3] == player &&
-            board[7] == player &&
-            board[11] == player &&
-            board[15] == player) ||
-
-        // Check diagonal lines
-        (board[0] == player &&
-            board[5] == player &&
-            board[10] == player &&
-            board[15] == player) ||
-        (board[3] == player &&
-            board[6] == player &&
-            board[9] == player &&
-            board[12] == player)) {
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  bool checkWinningFive(board, player) {
-    // Check horizontal lines
-    for (int i = 0; i <= 20; i += 5) {
-      if (board[i] == player &&
-          board[i + 1] == player &&
-          board[i + 2] == player &&
-          board[i + 3] == player &&
-          board[i + 4] == player) {
-        return true;
-      }
-    }
-
-    // Check vertical lines
-    for (int i = 0; i < 5; i++) {
-      if (board[i] == player &&
-          board[i + 5] == player &&
-          board[i + 10] == player &&
-          board[i + 15] == player &&
-          board[i + 20] == player) {
-        return true;
-      }
-    }
-
-    // Check diagonal lines
-    if ((board[0] == player &&
-            board[6] == player &&
-            board[12] == player &&
-            board[18] == player &&
-            board[24] == player) ||
-        (board[4] == player &&
-            board[8] == player &&
-            board[12] == player &&
-            board[16] == player &&
-            board[20] == player)) {
-      return true;
-    }
-
-    return false;
-  }
-
-  bool checkWinning(board, player) {
-    if ((board[0] == player && board[1] == player && board[2] == player) ||
-        (board[3] == player && board[4] == player && board[5] == player) ||
-        (board[6] == player && board[7] == player && board[8] == player) ||
-        (board[0] == player && board[3] == player && board[6] == player) ||
-        (board[1] == player && board[4] == player && board[7] == player) ||
-        (board[2] == player && board[5] == player && board[8] == player) ||
-        (board[0] == player && board[4] == player && board[8] == player) ||
-        (board[2] == player && board[4] == player && board[6] == player)) {
-      return true;
-    } else {
-      return false;
-    }
-  }
 
   @override
   void initState() {
@@ -729,13 +370,13 @@ class _SinglePlayerScreenActivityState
     var init;
     try {
       var ins = GetUserInfo();
-      init = await (await ins.getFieldValue(fieldName));
+      init = await ins.getFieldValue(fieldName);
       if (mounted) {
         setState(() {
           callback(init);
         });
       }
-      await ins.detectChange(fieldName, (val) {
+      ins.detectChange(fieldName, (val) {
         if (mounted) {
           setState(() {
             update(val);
@@ -987,11 +628,9 @@ class _SinglePlayerScreenActivityState
                                     backgroundImage: NetworkImage(_profilePic!),
                                     radius: 25,
                                   )
-                                : CircleAvatar(
-                                    child: getSvgImage(
-                                        imageName: "signin_Dora",
-                                        width: 154,
-                                        height: 172),
+                                : const CircleAvatar(
+                                    backgroundColor: Colors.transparent,
+                                    child: XOBattleLogo(size: 50),
                                     radius: 25,
                                   ),
                             Padding(
@@ -1058,16 +697,9 @@ class _SinglePlayerScreenActivityState
                                 ),
                               ],
                             ),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8.0),
-                              child: CircleAvatar(
-                                backgroundColor: Colors.transparent,
-                                child: getSvgImage(
-                                    imageName: 'signin_Dora',
-                                    width: 154,
-                                    height: 137),
-                                radius: 25,
-                              ),
+                            const Padding(
+                              padding: EdgeInsets.only(left: 8.0),
+                              child: XOBattleLogo(size: 50),
                             ),
                           ],
                         ),

@@ -1,72 +1,53 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 
 class GetUserInfo {
-  FirebaseDatabase _db = FirebaseDatabase.instance;
+  final FirebaseDatabase _db = FirebaseDatabase.instance;
 
-  getCoin() async {
-    DatabaseEvent snap = await _db
-        .ref()
-        .child("users")
-        .child(FirebaseAuth.instance.currentUser!.uid)
-        .once();
-    var val = (snap.snapshot.value as Map)["coin"];
+  String get _uid => FirebaseAuth.instance.currentUser!.uid;
 
-    return val;
+  // One-shot read of a single field value.
+  Future<dynamic> getFieldValue(String fieldname) async {
+    final snap = await _db.ref().child("users").child(_uid).once();
+    return (snap.snapshot.value as Map?)?[fieldname];
   }
 
-  getProfilePic() async {
-    DatabaseEvent snap = await _db
-        .ref()
-        .child("users")
-        .child(FirebaseAuth.instance.currentUser!.uid)
-        .once();
-    var val = (snap.snapshot.value as Map)["profilePic"];
-
-    return val;
+  // One-shot read of the coin balance.
+  Future<int> getCoin() async {
+    final snap = await _db.ref().child("users").child(_uid).child("coin").once();
+    return (snap.snapshot.value as int?) ?? 0;
   }
 
-  setProfilePic(var value) async {
-    await _db
-        .ref()
-        .child("users")
-        .child(FirebaseAuth.instance.currentUser!.uid)
-        .update({"profilePic": value});
+  Future<dynamic> getProfilePic() async {
+    final snap = await _db.ref().child("users").child(_uid).once();
+    return (snap.snapshot.value as Map?)?["profilePic"];
   }
 
-  setUsername(var value) async {
-    await _db
-        .ref()
-        .child("users")
-        .child(FirebaseAuth.instance.currentUser!.uid)
-        .update({"username": value});
+  Future<void> setProfilePic(dynamic value) async {
+    await _db.ref().child("users").child(_uid).update({"profilePic": value});
   }
 
-  getFieldValue(String fieldname) async {
-    DatabaseEvent snap = await _db
-        .ref()
-        .child("users")
-        .child(FirebaseAuth.instance.currentUser!.uid)
-        .once();
-    var val = (snap.snapshot.value as Map)[fieldname];
-
-    return val;
+  Future<void> setUsername(dynamic value) async {
+    await _db.ref().child("users").child(_uid).update({"username": value});
   }
 
-  Future detectChange(String field, Function(dynamic value) callBack) async {
-    dynamic _coin = 0;
-    _db
+  // Returns a StreamSubscription the caller MUST cancel (e.g. in dispose()).
+  // Listens directly on the specific field path so only changes to that field
+  // trigger the callback — no cross-field noise, no listener leaks.
+  //
+  // onValue fires immediately with the current value AND on every future change,
+  // so you don't need a separate getCoin() call when using this.
+  StreamSubscription<DatabaseEvent> detectChange(
+    String field,
+    void Function(dynamic value) callback,
+  ) {
+    return _db
         .ref()
         .child("users")
-        .child(FirebaseAuth.instance.currentUser!.uid)
-        .onChildChanged
-        .listen((DatabaseEvent ev) {
-      if (ev.snapshot.key == "$field") {
-        _coin = ev.snapshot.value;
-
-        callBack(ev.snapshot.value);
-      }
-    });
-    return _coin;
+        .child(_uid)
+        .child(field)
+        .onValue
+        .listen((ev) => callback(ev.snapshot.value));
   }
 }

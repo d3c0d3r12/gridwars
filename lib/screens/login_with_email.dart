@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../helpers/color.dart';
+import '../widgets/xo_logo.dart';
 import '../helpers/constant.dart';
 import '../functions/authentication.dart';
 import 'signup_with_email.dart';
@@ -101,7 +102,7 @@ class _LoginWithEmailState extends State<LoginWithEmail> {
     return Container(
       alignment: Alignment.bottomCenter,
       height: MediaQuery.of(context).size.height * 0.35,
-      child: getSvgImage(imageName: "signin_Dora", width: 154, height: 172),
+      child: const XOBattleLogo(size: 140),
     );
   }
 
@@ -146,7 +147,7 @@ class _LoginWithEmailState extends State<LoginWithEmail> {
         keyboardType: TextInputType.text,
 
         style: TextStyle(
-          color: primaryColor,
+          color: white,
           fontWeight: FontWeight.normal,
         ),
 
@@ -162,16 +163,16 @@ class _LoginWithEmailState extends State<LoginWithEmail> {
         decoration: InputDecoration(
           prefixIcon: Icon(
             Icons.email_outlined,
-            color: primaryColor,
+            color: white.withValues(alpha: 0.7),
             size: 20,
           ),
           hintText: utils.getTranslated(context, "email"),
           hintStyle: Theme.of(context)
               .textTheme
               .titleSmall!
-              .copyWith(color: primaryColor, fontWeight: FontWeight.normal),
+              .copyWith(color: white.withValues(alpha: 0.5), fontWeight: FontWeight.normal),
           filled: true,
-          fillColor: white,
+          fillColor: white.withValues(alpha: 0.1),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 10,
             vertical: 5,
@@ -200,7 +201,7 @@ class _LoginWithEmailState extends State<LoginWithEmail> {
         keyboardType: TextInputType.text,
         //controller: mobileController,
         style: TextStyle(
-          color: primaryColor,
+          color: white,
           fontWeight: FontWeight.normal,
         ),
         //focusNode: monoFocus,
@@ -215,7 +216,7 @@ class _LoginWithEmailState extends State<LoginWithEmail> {
         decoration: InputDecoration(
           prefixIcon: Icon(
             Icons.lock_outlined,
-            color: primaryColor,
+            color: white.withValues(alpha: 0.7),
             size: 20,
           ),
           suffixIcon: IconButton(
@@ -223,10 +224,12 @@ class _LoginWithEmailState extends State<LoginWithEmail> {
                 ? const Icon(
                     Icons.visibility,
                     size: 20.0,
+                    color: Colors.white54,
                   )
                 : const Icon(
                     Icons.visibility_off,
                     size: 20.0,
+                    color: Colors.white54,
                   ),
             onPressed: () {
               setState(() {
@@ -238,9 +241,9 @@ class _LoginWithEmailState extends State<LoginWithEmail> {
           hintStyle: Theme.of(context)
               .textTheme
               .titleSmall!
-              .copyWith(color: primaryColor, fontWeight: FontWeight.normal),
+              .copyWith(color: white.withValues(alpha: 0.5), fontWeight: FontWeight.normal),
           filled: true,
-          fillColor: white,
+          fillColor: white.withValues(alpha: 0.1),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 10,
             vertical: 5,
@@ -306,24 +309,6 @@ class _LoginWithEmailState extends State<LoginWithEmail> {
               ),
               padding: const EdgeInsets.all(10),
               child: getSvgImage(imageName: 'google_logo'),
-            ),
-          ),
-          const SizedBox(
-            width: 10.0,
-          ),
-          InkWell(
-            onTap: () async {
-              await Auth.anonymousSignin(context);
-            },
-            child: Container(
-              width: MediaQuery.of(context).size.width * 0.13,
-              height: MediaQuery.of(context).size.height * 0.06,
-              decoration: BoxDecoration(
-                color: white,
-                borderRadius: BorderRadius.circular(5.0),
-              ),
-              padding: const EdgeInsets.all(10),
-              child: getSvgImage(imageName: 'play_guest'),
             ),
           ),
           const SizedBox(
@@ -420,29 +405,33 @@ class _LoginWithEmailState extends State<LoginWithEmail> {
   }
 
   getSignInButton() {
-    return InkWell(
-        child: Padding(
-          padding: const EdgeInsetsDirectional.only(top: 10.0),
-          child: Container(
-            width: MediaQuery.of(context).size.width * 0.60,
-            height: MediaQuery.of(context).size.height * 0.06,
-            decoration: BoxDecoration(
-              color: white,
-              borderRadius: BorderRadius.circular(5.0),
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(top: 10.0),
+      child: GestureDetector(
+        onTap: () {
+          setState(() { isLoading = true; });
+          validateAndSubmit();
+        },
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.70,
+          height: MediaQuery.of(context).size.height * 0.065,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            gradient: LinearGradient(
+              colors: [secondarySelectedColor, const Color(0xFFFF8800)],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
             ),
-            child: Center(
-                child: Text(
+          ),
+          child: Center(
+            child: Text(
               utils.getTranslated(context, "signIn"),
-              style: TextStyle(color: primaryColor, fontSize: 20),
+              style: TextStyle(color: primaryColor, fontSize: 18, fontWeight: FontWeight.bold),
               overflow: TextOverflow.ellipsis,
-            )),
+            ),
           ),
         ),
-        onTap: () {
-          setState(() {
-            isLoading = true;
-          });
-          validateAndSubmit();
-        });
+      ),
+    );
   }
 }

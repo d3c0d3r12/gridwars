@@ -25,19 +25,22 @@ class Alert extends StatelessWidget {
       width: 100,
       height: 100,
       child: AlertDialog(
-        backgroundColor: primaryColor.withValues(alpha: 0.92),
+        backgroundColor: secondaryColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.35), width: 1.2),
+        ),
         title: title,
         actionsPadding: EdgeInsets.zero,
         actions: isMultipleAction
             ? multipleAction
             : [
                 SizedBox(
-                  //width: MediaQuery.of(context).size.width - 5,
                   child: Padding(
                     padding: const EdgeInsets.all(8.0),
                     child: TextButton(
                       child: Text(defaultActionButtonName,
-                          style: TextStyle(color: primaryColor)),
+                          style: TextStyle(color: secondarySelectedColor, fontWeight: FontWeight.bold)),
                       onPressed: onTapActionButton,
                     ),
                   ),

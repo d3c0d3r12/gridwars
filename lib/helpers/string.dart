@@ -27,47 +27,47 @@ final String price250 = "250 USD";
 final String price500 = "500 USD";
 
 final Map userSkin = {
-  "DORA Classic": {
+  "XO Classic": {
     'userSkin': "cross_skin",
     'opponentSkin': "circle_skin",
     'price': 0,
   },
-  "DORA Plus": {
+  "Neon Cross": {
     'userSkin': "plus_skin",
     'opponentSkin': "circle_skin",
     'price': 100,
   },
-  "DORA Square": {
+  "Iron Block": {
     'userSkin': "square_skin",
     'opponentSkin': "circle_skin",
     'price': 150,
   },
-  "DORA Polygon": {
+  "Phantom Edge": {
     'userSkin': "polygon_skin",
     'opponentSkin': "cross_skin",
     'price': 150,
   },
-  "DORA Hexagon": {
+  "Crystal Hex": {
     'userSkin': "hexagon_skin",
     'opponentSkin': "cross_skin",
     'price': 200,
   },
-  "DORA Octagon": {
+  "Titan Shield": {
     'userSkin': "octagon_skin",
     'opponentSkin': "circle_skin",
-    'price': 15000,
+    'price': 1500,
   },
-  "DORA Triangle": {
+  "Blade Point": {
     'userSkin': "triangle_skin",
     'opponentSkin': "circle_skin",
     'price': 150,
   },
-  "DORA Diamond": {
+  "Diamond Elite": {
     'userSkin': "diamond_skin",
     'opponentSkin': "circle_skin",
     'price': 150,
   },
-  "DORA Offer": {
+  "Void Pack": {
     'userSkin': "cross_skin",
     'opponentSkin': "octagon_skin",
     'price': 0,

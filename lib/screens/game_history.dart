@@ -174,7 +174,7 @@ class GameHistoryState extends State<GameHistory> {
                         ),
                       ],
                     ),
-                    Expanded(child: Coin()),
+                    Expanded(child: CoinWidget()),
                     DropdownButton(
                       iconEnabledColor: white,
                       underline: Container(),

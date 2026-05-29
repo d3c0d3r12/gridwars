@@ -88,14 +88,14 @@ class _ProfileBodyState extends State<Profile> {
     var init;
     try {
       var ins = GetUserInfo();
-      init = await (await ins.getFieldValue(fieldName));
+      init = await ins.getFieldValue(fieldName);
       if (mounted) {
         setState(() {
           callback(init);
         });
       }
 
-      await ins.detectChange(fieldName, (val) {
+      ins.detectChange(fieldName, (val) {
         if (mounted) {
           if (isLoading) {
             isLoading = false;
@@ -180,6 +180,8 @@ class _ProfileBodyState extends State<Profile> {
                               )
                             ],
                           ),
+                          const SizedBox(height: 6),
+                          _RankBadge(score: score ?? 0),
                         ],
                       ),
                     ),
@@ -1071,5 +1073,45 @@ class _ProfileBodyState extends State<Profile> {
             ],
           );
         });
+  }
+}
+
+// ── Rank Badge ─────────────────────────────────────────────────────────────
+
+class _RankBadge extends StatelessWidget {
+  final int score;
+  const _RankBadge({required this.score});
+
+  static const _tiers = [
+    {'label': '💎 Diamond',  'min': 7000, 'color': 0xFF00E5FF},
+    {'label': '🔮 Platinum', 'min': 3500, 'color': 0xFFB39DDB},
+    {'label': '🥇 Gold',     'min': 1500, 'color': 0xFFFFD700},
+    {'label': '🥈 Silver',   'min': 500,  'color': 0xFFBDBDBD},
+    {'label': '🥉 Bronze',   'min': 0,    'color': 0xFFCD7F32},
+  ];
+
+  Map<String, dynamic> get _tier {
+    for (final t in _tiers) {
+      if (score >= (t['min'] as int)) return t;
+    }
+    return _tiers.last;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = _tier;
+    final col = Color(t['color'] as int);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: col.withValues(alpha: 0.15),
+        border: Border.all(color: col.withValues(alpha: 0.5), width: 1),
+      ),
+      child: Text(
+        t['label'] as String,
+        style: TextStyle(color: col, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5),
+      ),
+    );
   }
 }

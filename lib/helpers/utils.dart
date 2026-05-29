@@ -207,9 +207,11 @@ class Utils {
         builder: (context) => PopScope(
               canPop: false,
               child: AlertDialog(
-                backgroundColor: primaryColor,
+                backgroundColor: secondaryColor,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(20.0))),
+                  borderRadius: BorderRadius.all(Radius.circular(20.0)),
+                  side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.35), width: 1.2),
+                ),
                 title: title,
                 content: content,
                 actions: multipleAction as List<Widget>?,
@@ -225,12 +227,12 @@ class Utils {
     return r + st;
   }
 
-  // Cached — same colors every time, no need to recreate on every build
   static final BoxDecoration _cachedGradBack = BoxDecoration(
       gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [secondaryColor, primaryColor]));
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          stops: [0.0, 0.5, 1.0],
+          colors: [secondaryColor, primaryColor, Color(0xFF06030F)]));
 
   BoxDecoration gradBack() => _cachedGradBack;
 
@@ -271,10 +273,12 @@ class Utils {
       content: Text(
         message,
         textAlign: TextAlign.center,
-        style: TextStyle(color: primaryColor),
+        style: TextStyle(color: primaryColor, fontWeight: FontWeight.w600),
       ),
-      backgroundColor: white,
-      elevation: 1.0,
+      backgroundColor: secondarySelectedColor,
+      elevation: 4.0,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ));
   }
 }

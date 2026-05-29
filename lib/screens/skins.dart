@@ -73,7 +73,7 @@ class _SkinsState extends State<Skins> {
       });
     } else {
       skinData.add(
-          getSkin("DORA Classic", "cross_skin", "circle_skin", 0, true, true));
+          getSkin("XO Classic", "cross_skin", "circle_skin", 0, true, true));
     }
     return skinData;
   }
@@ -226,8 +226,8 @@ class _SkinsState extends State<Skins> {
             onTap: () async {
               music.play(click);
               var ins = GetUserInfo();
-              var usersCoin = await (await ins.getCoin());
-              if (usersCoin < price && isSkinPurchased == false) {
+              final usersCoin = await ins.getCoin();
+              if (usersCoin < (price ?? 0) && isSkinPurchased == false) {
                 Dialogue.lessMoney(context);
               } else if (isSkinPurchased == false) {
                 showDialog(

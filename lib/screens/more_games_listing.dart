@@ -125,7 +125,7 @@ class _MoreGamesListingState extends State<MoreGamesListing> {
                         imageUrl: game.gameImage,
                         progressIndicatorBuilder: (context, url, progress) {
                           return getSvgImage(
-                            imageName: 'dora_placeholder',
+                            imageName: 'coin_symbol',
                             height: 70,
                             width: 70,
                             fit: BoxFit.cover,

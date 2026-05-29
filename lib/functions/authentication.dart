@@ -48,7 +48,7 @@ class Auth {
             .child(value.user!.uid)
             .push()
             .set({
-          "itemid": "DORA Classic",
+          "itemid": "XO Classic",
           "itemo": defaultOskin,
           "itemx": defaultXskin,
           "selectedStatus": "Active"
@@ -322,7 +322,7 @@ class Auth {
             .child(FirebaseAuth.instance.currentUser!.uid)
             .push()
             .set({
-          "itemid": "DORA Classic",
+          "itemid": "XO Classic",
           "itemo": defaultOskin,
           "itemx": defaultXskin,
           "selectedStatus": "Active"

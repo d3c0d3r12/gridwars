@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../helpers/color.dart';
+import '../widgets/xo_logo.dart';
 import '../helpers/constant.dart';
 import '../helpers/utils.dart';
 import '../functions/authentication.dart';
@@ -26,7 +27,6 @@ class _AuthOptionsScreenState extends State<Login> {
   @override
   void initState() {
     super.initState();
-
     checkUserLoggedIn();
   }
 
@@ -36,28 +36,76 @@ class _AuthOptionsScreenState extends State<Login> {
     t?.cancel();
   }
 
+  Widget _buildAuthButton({
+    required Widget icon,
+    required String label,
+    required VoidCallback onPressed,
+    bool isAccent = false,
+  }) {
+    return Container(
+      height: 54,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: isAccent
+            ? LinearGradient(
+                colors: [secondarySelectedColor, Color(0xFFFF8800)],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              )
+            : null,
+        color: isAccent ? null : white.withValues(alpha: 0.08),
+        border: isAccent
+            ? null
+            : Border.all(color: white.withValues(alpha: 0.18), width: 1),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onPressed,
+          splashColor: secondarySelectedColor.withValues(alpha: 0.3),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                icon,
+                Expanded(
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: isAccent ? primaryColor : white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
     return Scaffold(
       body: Container(
-        width: MediaQuery.of(context).size.width,
-        height: MediaQuery.of(context).size.height,
+        width: size.width,
+        height: size.height,
         decoration: utils.gradBack(),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [
             Container(
               alignment: Alignment.bottomCenter,
-              height: MediaQuery.of(context).size.height * 0.4,
-              child: getSvgImage(
-                imageName: "signin_Dora",
-                width: 154,
-                height: 172,
-              ),
+              height: size.height * 0.38,
+              child: const XOBattleLogo(size: 140),
             ),
-            Container(
-              padding: EdgeInsets.symmetric(
-                  vertical: MediaQuery.of(context).size.height * 0.1),
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: size.height * 0.05),
               child: Text(
                 utils.getTranslated(context, "CalculateEveryMove"),
                 style: Theme.of(context)
@@ -66,134 +114,70 @@ class _AuthOptionsScreenState extends State<Login> {
                     .copyWith(fontFamily: 'DISPLATTER', color: white),
               ),
             ),
-            Platform.isIOS
-                ? Container(
-                    height: MediaQuery.of(context).size.height * 0.06,
-                    width: MediaQuery.of(context).size.width,
-                    padding: const EdgeInsets.symmetric(horizontal: 40.0),
-                    child: ElevatedButton.icon(
-                      style: ButtonStyle(
-                        backgroundColor: WidgetStateProperty.resolveWith<Color>(
-                          (Set<WidgetState> states) {
-                            if (states.contains(WidgetState.pressed))
-                              return secondarySelectedColor;
-                            return white;
-                          },
-                        ),
-                      ),
-                      onPressed: () async {
-                        Auth.signin(context, false, "IOS");
-                      },
-                      icon: getSvgImage(imageName: 'apple_icon'),
-                      label: Center(
-                        child: Text(
-                          utils.getTranslated(context, "signInApple"),
-                          style: TextStyle(
-                            color: primaryColor,
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      children: [
+                        if (Platform.isIOS) ...[
+                          _buildAuthButton(
+                            icon: getSvgImage(imageName: 'apple_icon', width: 22, height: 22),
+                            label: utils.getTranslated(context, "signInApple"),
+                            onPressed: () => Auth.signin(context, false, "IOS"),
                           ),
+                          const SizedBox(height: 12),
+                        ],
+                        _buildAuthButton(
+                          icon: getSvgImage(imageName: "google_logo", width: 22, height: 22),
+                          label: utils.getTranslated(context, "signInGoogle"),
+                          onPressed: () => Auth.signin(context, false, "Android", email: "", password: ""),
                         ),
+                        const SizedBox(height: 12),
+                        _buildAuthButton(
+                          icon: Icon(Icons.email_outlined, color: secondarySelectedColor, size: 22),
+                          label: utils.getTranslated(context, "signInEmail"),
+                          onPressed: () async {
+                            await Navigator.of(context).push(
+                              CupertinoPageRoute(builder: (_) => LoginWithEmail()),
+                            );
+                          },
+                          isAccent: true,
+                        ),
+                      ],
+                    ),
+                    // Guest play — bottom of screen, always visible
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 28),
+                      child: Column(
+                        children: [
+                          Row(children: [
+                            Expanded(child: Divider(color: white.withValues(alpha: 0.15))),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: Text('or', style: TextStyle(color: white.withValues(alpha: 0.4), fontSize: 13)),
+                            ),
+                            Expanded(child: Divider(color: white.withValues(alpha: 0.15))),
+                          ]),
+                          const SizedBox(height: 14),
+                          GestureDetector(
+                            onTap: () => Auth.anonymousSignin(context),
+                            child: Text(
+                              'Continue as Guest',
+                              style: TextStyle(
+                                color: white.withValues(alpha: 0.55),
+                                fontSize: 13,
+                                decoration: TextDecoration.underline,
+                                decorationColor: white.withValues(alpha: 0.35),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  )
-                : Container(),
-            SizedBox(height: 10.0),
-            Container(
-              height: MediaQuery.of(context).size.height * 0.06,
-              width: MediaQuery.of(context).size.width,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 40.0,
-              ),
-              child: ElevatedButton.icon(
-                style: ButtonStyle(
-                  backgroundColor: WidgetStateProperty.resolveWith<Color>(
-                    (Set<WidgetState> states) {
-                      if (states.contains(WidgetState.pressed))
-                        return secondarySelectedColor;
-                      return white;
-                    },
-                  ),
-                ),
-                onPressed: () async {
-                  Auth.signin(context, false, "Android",
-                      email: "", password: "");
-                },
-                icon: getSvgImage(imageName: "google_logo"),
-                label: Center(
-                  child: Text(
-                    utils.getTranslated(context, "signInGoogle"),
-                    style: TextStyle(
-                      color: primaryColor,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(
-              height: 10.0,
-            ),
-            Container(
-              height: MediaQuery.of(context).size.height * 0.06,
-              width: MediaQuery.of(context).size.width,
-              padding: const EdgeInsets.symmetric(horizontal: 40.0),
-              child: ElevatedButton.icon(
-                style: ButtonStyle(
-                  backgroundColor: WidgetStateProperty.resolveWith<Color>(
-                    (Set<WidgetState> states) {
-                      if (states.contains(WidgetState.pressed))
-                        return secondarySelectedColor;
-                      return white;
-                    },
-                  ),
-                ),
-                onPressed: () async {
-                  await Auth.anonymousSignin(context).then((value) {
-                    t?.cancel();
-                  });
-                },
-                icon: getSvgImage(imageName: 'play_guest'),
-                label: Center(
-                  child: Text(
-                    utils.getTranslated(context, "signInGuest"),
-                    style: TextStyle(
-                      color: primaryColor,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(
-              height: 10.0,
-            ),
-            Container(
-              height: MediaQuery.of(context).size.height * 0.07,
-              width: MediaQuery.of(context).size.width,
-              padding: const EdgeInsetsDirectional.only(
-                  start: 40.0, end: 40, bottom: 10),
-              child: ElevatedButton.icon(
-                style: ButtonStyle(
-                  backgroundColor: WidgetStateProperty.resolveWith<Color>(
-                    (Set<WidgetState> states) {
-                      if (states.contains(WidgetState.pressed))
-                        return secondarySelectedColor;
-                      return white;
-                    },
-                  ),
-                ),
-                onPressed: () async {
-                  await Navigator.of(context).push(CupertinoPageRoute(
-                      builder: (context) => LoginWithEmail()));
-                },
-                icon: Icon(
-                  Icons.email,
-                  color: red,
-                ),
-                label: Center(
-                  child: Text(
-                    utils.getTranslated(context, "signInEmail"),
-                    style: TextStyle(
-                      color: primaryColor,
-                    ),
-                  ),
+                  ],
                 ),
               ),
             ),
@@ -205,7 +189,6 @@ class _AuthOptionsScreenState extends State<Login> {
 
   void checkUserLoggedIn() async {
     bool value = await utils.getUserLoggedIn("isLoggedIn");
-
     if (value) {
       utils.replaceScreenAfter(context, "/home");
     }

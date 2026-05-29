@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/xo_logo.dart';
 
 import '../helpers/color.dart';
 import '../helpers/constant.dart';
@@ -16,7 +17,7 @@ class HowToPlay extends StatelessWidget {
         backgroundColor: Colors.transparent,
         automaticallyImplyLeading: false,
         elevation: 0,
-        title: Coin(),
+        title: CoinWidget(),
       ),
       body: Stack(
         children: [
@@ -89,8 +90,7 @@ class HowToPlay extends StatelessWidget {
                   ),
                 ),
               ),
-              getSvgImage(
-                  imageName: "dora_instructor", width: 131, height: 146),
+              const XOBattleLogo(size: 130),
             ],
           ),
         ],

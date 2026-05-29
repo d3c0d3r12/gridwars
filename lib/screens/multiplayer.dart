@@ -93,7 +93,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
 
   void _startTimer() {
     _stopTimer();
-    _timerNotifier.value = countdowntime;
+    _timerNotifier.value = _roundTimerDuration;
     _gameTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) { t.cancel(); return; }
       if (_timerNotifier.value <= 0) {
@@ -188,11 +188,21 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
   String whoseTimeout = "";
 
   StreamSubscription? subs;
+  StreamSubscription? _doubleSub;
   Multiplayer multi = Multiplayer();
   int curRound = 1;
   bool closedByUs = false;
   Future<DatabaseEvent>? _gameSnapshot;
   int win1Count = 0, win2Count = 0, tieCount = 0;
+
+  // Coin Doubler state
+  bool _doubleUsed = false;
+  bool _doubleDialogShowing = false;
+
+  // Sudden Death state
+  int _consecutiveDraws = 0;
+  int _roundTimerDuration = countdowntime;
+  bool _suddenDeathShowing = false;
 
   @override
   void initState() {
@@ -230,6 +240,71 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
     getFieldValue("profilePic", (e) => profilePic = e, (e) => profilePic = e);
     getFieldValue("username", (e) => username = e, (e) => username = e);
 
+    // Listen for Sudden Death trigger from opponent
+    _ins.ref().child("Game").child(widget.gameKey).child("suddenDeath")
+        .onValue.listen((ev) {
+      if (ev.snapshot.value == true && mounted && !_suddenDeathShowing) {
+        _triggerSuddenDeath();
+      }
+    });
+
+    // Listen for coin-doubler requests from the opponent
+    _doubleSub = _ins
+        .ref()
+        .child("Game")
+        .child(widget.gameKey)
+        .child("doubleRequest")
+        .onValue
+        .listen((ev) {
+      final requestFrom = ev.snapshot.value as String?;
+      if (requestFrom == null || requestFrom == _auth.currentUser!.uid) return;
+      if (_doubleDialogShowing || !mounted) return;
+      _doubleDialogShowing = true;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          backgroundColor: secondaryColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: secondarySelectedColor.withValues(alpha: 0.4), width: 1.5),
+          ),
+          title: Text('Double Down?', style: TextStyle(color: white, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+          content: Text(
+            'Opponent wants to double the stake!\nWinner gets 4× the entry fee.',
+            style: TextStyle(color: white.withValues(alpha: 0.8)),
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                _doubleDialogShowing = false;
+                // Multiply entryFee by 2 in Firebase
+                final feeSnap = await _ins.ref().child("Game").child(widget.gameKey).child("entryFee").once();
+                final fee = (feeSnap.snapshot.value as int? ?? 0);
+                await _ins.ref().child("Game").child(widget.gameKey).update({
+                  "entryFee": fee * 2,
+                  "doubleRequest": null,
+                });
+                if (mounted) setState(() => _doubleUsed = true);
+                utils.setSnackbar(context, '🔥 Stake doubled! Winner takes 4×');
+              },
+              child: Text('Accept 🔥', style: TextStyle(color: secondarySelectedColor, fontWeight: FontWeight.bold)),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                _doubleDialogShowing = false;
+                await _ins.ref().child("Game").child(widget.gameKey).update({"doubleRequest": null});
+              },
+              child: Text('Decline', style: TextStyle(color: white.withValues(alpha: 0.5))),
+            ),
+          ],
+        ),
+      ).then((_) => _doubleDialogShowing = false);
+    });
+
     //----Listen Updates in database and Update local buttons list when data changes
     Multiplayer.updateLocalList(widget.gameKey, _ins, (ev) async {
       music.play(dice);
@@ -264,14 +339,14 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
     var init;
     try {
       var ins = GetUserInfo();
-      init = await (await ins.getFieldValue(fieldName));
+      init = await ins.getFieldValue(fieldName);
       if (mounted) {
         setState(() {
           callback(init);
         });
       }
 
-      await ins.detectChange(fieldName, (val) {
+      ins.detectChange(fieldName, (val) {
         if (mounted) {
           setState(() {
             update(val);
@@ -337,6 +412,8 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
 
         var kUid = _auth.currentUser!.uid;
         if (uid == kUid) {
+          _consecutiveDraws = 0; // Reset on a decisive round
+          setState(() => _roundTimerDuration = countdowntime);
           try {
             await _ins
                 .ref()
@@ -351,11 +428,16 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
       },
       onTie: (i) {
         tieCount += 1;
-        _ins
-            .ref()
-            .child("Game")
-            .child(widget.gameKey)
-            .update({"tie": tieCount});
+        _consecutiveDraws++;
+        final newSuddenDeath = _consecutiveDraws >= 2;
+        _ins.ref().child("Game").child(widget.gameKey).update({
+          "tie": tieCount,
+          "consecutiveDraws": _consecutiveDraws,
+          if (newSuddenDeath) "suddenDeath": true,
+        });
+        if (newSuddenDeath && !_suddenDeathShowing && mounted) {
+          _triggerSuddenDeath();
+        }
       },
     );
   }
@@ -976,7 +1058,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
   returnImage(i) {
     if (istimerCompleted) {
       if (buttons[i]["player"] == whoseTimeout) {
-        return "dora_timeout";
+        return "cross_skin";
       } else {
         return widget.imageo;
       }
@@ -986,14 +1068,14 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
         winGame != null &&
         winGame! &&
         (i == winVar1 || i == winVar2 || i == winVar3))
-      return "dora_win";
+      return "cross_skin";
     else if (winVar1 != null &&
         winVar2 != null &&
         winVar3 != null &&
         winGame != null &&
         !winGame! &&
         (i == winVar1 || i == winVar2 || i == winVar3))
-      return "dora_lose";
+      return "circle_skin";
     else if (buttons[i]["player"] == "player1" && buttons[i]["player"] != "0") {
       if (player1Id == _auth.currentUser!.uid) {
         return widget.imagex;
@@ -1013,8 +1095,25 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
     _stopTimer();
     _timerNotifier.dispose();
     subs?.cancel();
+    _doubleSub?.cancel();
     Multiplayer.dispose();
     super.dispose();
+  }
+
+  Future<void> _triggerSuddenDeath() async {
+    if (_suddenDeathShowing) return;
+    _suddenDeathShowing = true;
+    _stopTimer();
+    await Dialogue.suddenDeath(context);
+    if (!mounted) return;
+    setState(() {
+      _roundTimerDuration = blitzCountdown;
+      _consecutiveDraws = 0;
+      _suddenDeathShowing = false;
+    });
+    // Clear the suddenDeath flag so it can re-trigger if needed
+    await _ins.ref().child("Game").child(widget.gameKey).update({"suddenDeath": null, "consecutiveDraws": 0});
+    _startTimer();
   }
 
   Future<void> getGamebuttons() async {
@@ -1094,6 +1193,30 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                     ],
                   ),
                   Spacer(),
+                  // Coin Doubler button
+                  if (!_doubleUsed)
+                    GestureDetector(
+                      onTap: () async {
+                        setState(() => _doubleUsed = true);
+                        await _ins.ref().child("Game").child(widget.gameKey).update({
+                          "doubleRequest": _auth.currentUser!.uid,
+                        });
+                        utils.setSnackbar(context, 'Double request sent! Waiting for opponent…');
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        margin: const EdgeInsets.only(right: 4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          gradient: LinearGradient(colors: [secondarySelectedColor, const Color(0xFFFF8800)]),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Text('2×', style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(width: 3),
+                          Icon(Icons.bolt_rounded, color: primaryColor, size: 14),
+                        ]),
+                      ),
+                    ),
                   IconButton(
                       onPressed: () async {
                         showDialog(

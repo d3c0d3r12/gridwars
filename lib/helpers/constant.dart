@@ -50,6 +50,23 @@ final guestProfilePic =
     "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
 
 final List multiplayerEntryAmount = [25, 50, 100, 200];
+final int fixedEntryFee = 25;
+final int fixedRounds = 3;
+
+// Blitz mode timer (seconds per move)
+final int blitzCountdown = 7;
+
+// Rank tier thresholds (based on `score` field)
+const int rankDiamondScore  = 7000;
+const int rankPlatinumScore = 3500;
+const int rankGoldScore     = 1500;
+const int rankSilverScore   = 500;
+// Bronze starts at 0
+
+// Streak mode coin rewards
+const int streakCoinPerWin   = 5;   // coins per consecutive win
+const int streakBonusAt5     = 25;  // bonus at 5-streak
+const int streakBonusAt10    = 75;  // bonus at 10-streak
 final List<String> typeOfLevel = ["Easy", "Medium", "Hard"];
 
 final List noOfRound = ["ONE", "THREE", "FIVE", "SEVEN"];
@@ -87,7 +104,7 @@ final String aboutText =
     "<p>Welcome to <b>XO Battle</b><br><br>The ultimate X vs O battle game!<br><br>Challenge your friends or play against AI in this classic strategy game — reimagined.</p>";
 
 final String contactText =
-    "<h2><strong>Contact Us</strong></h2> <p>For any queries, feedback or support feel free to reach out to us:</p> <p>&nbsp;</p><p>Email <a href=mailto:support@gridwars.game>support@gridwars.game</a></p>";
+    "<h2><strong>Contact Us</strong></h2> <p>For any queries, feedback or support feel free to reach out to us:</p> <p>&nbsp;</p><p>Email <a href=mailto:support@xobattle.game>support@xobattle.game</a></p>";
 
 Widget getSvgImage({
   required String imageName,

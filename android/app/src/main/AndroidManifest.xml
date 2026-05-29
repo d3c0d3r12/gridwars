@@ -22,7 +22,8 @@
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="XO Battle"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="true"
+        android:enableOnBackInvokedCallback="true">
 
         <activity
             android:exported="true"

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import '../widgets/xo_logo.dart';
 
 import '../helpers/color.dart';
 import '../helpers/constant.dart';
@@ -471,10 +472,7 @@ class _PassNPLayState extends State<PassNPLay> {
                         Row(
                           children: [
                             CircleAvatar(
-                              child: getSvgImage(
-                                  imageName: "signin_Dora",
-                                  width: 154,
-                                  height: 172),
+                              child: const XOBattleLogo(size: 50),
                               radius: 25,
                               backgroundColor: Colors.transparent,
                             ),
@@ -536,10 +534,7 @@ class _PassNPLayState extends State<PassNPLay> {
                               padding: const EdgeInsets.only(left: 8.0),
                               child: CircleAvatar(
                                 backgroundColor: Colors.transparent,
-                                child: getSvgImage(
-                                    imageName: "signin_Dora",
-                                    width: 154,
-                                    height: 172),
+                                child: const XOBattleLogo(size: 50),
                                 radius: 25,
                               ),
                             ),
