@@ -17,10 +17,14 @@ import '../functions/getCoin.dart';
 import '../models/sound_effect.dart';
 import '../widgets/xo_logo.dart';
 import '../functions/admin_service.dart';
+import '../functions/friend_service.dart';
+import '../functions/notification_service.dart';
+import '../helpers/game_tags.dart';
 import 'admin_panel.dart';
 import 'arcade.dart';
 import 'daily_challenge.dart';
 import 'finding_player.dart';
+import 'friend_challenge.dart';
 import 'offline_play.dart';
 import 'pass_n_play.dart';
 import 'private_room.dart';
@@ -52,12 +56,16 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
   String? getlanguage;
   StreamSubscription? _coinSub;
   StreamSubscription? _banSub;
+  StreamSubscription? _challengeSub;
   bool _isAdmin = false;
+  bool _challengePrimed = false;
+  final Set<String> _seenChallenges = {};
 
   @override
   void initState() {
     super.initState();
     _checkAdminAndBan();
+    _startNotifications();
     _entryCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 600));
     _entryOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -104,11 +112,78 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
     });
   }
 
+  // Start in-app notifications (badges + banners) and listen for game challenges.
+  void _startNotifications() {
+    FriendService.goOnline();
+    NotificationService.instance.onBanner = (msg) {
+      if (mounted) utils.setSnackbar(context, msg);
+    };
+    NotificationService.instance.start();
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    _challengeSub = FriendService.incomingChallenges().listen((list) {
+      if (!mounted) return;
+      // Prime on first load so existing challenges don't auto-pop a dialog.
+      if (!_challengePrimed) {
+        _challengePrimed = true;
+        _seenChallenges.addAll(list.map((c) => c.id));
+        return;
+      }
+      for (final c in list) {
+        if (_seenChallenges.add(c.id)) {
+          _showChallengeDialog(c);
+          break; // one at a time
+        }
+      }
+      _seenChallenges.retainWhere((id) => list.any((c) => c.id == id));
+    });
+  }
+
+  void _showChallengeDialog(Challenge c) {
+    final g = tagById(c.gameType);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: surfaceColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(children: [
+          Icon(g.icon, color: g.color, size: 22),
+          const SizedBox(width: 10),
+          Expanded(child: Text('Game Challenge',
+              style: TextStyle(color: inkColor, fontWeight: FontWeight.w800, fontSize: 17))),
+        ]),
+        content: Text(
+          '${utils.limitChar(c.fromName, 16)} challenged you to ${g.name}!\nEntry: $fixedEntryFee coins.',
+          style: TextStyle(color: ink2Color, fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              FriendService.removeChallenge(c.id);
+            },
+            child: Text('Decline', style: TextStyle(color: ink2Color)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              acceptIncomingChallenge(context, c);
+            },
+            child: Text('Accept', style: TextStyle(color: g.color, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _entryCtrl.dispose();
     _coinSub?.cancel();
     _banSub?.cancel();
+    _challengeSub?.cancel();
     super.dispose();
   }
 
@@ -307,7 +382,7 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
             // Coin chip
             _CoinChip(coin: coin),
             const SizedBox(width: 10),
-            // Profile button
+            // Profile button (with social notification badge)
             GestureDetector(
               onTap: () {
                 music.play(click);
@@ -317,17 +392,43 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
                   setState(() {});
                 });
               },
-              child: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: surfaceColor,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: lineColor),
-                  boxShadow: [shadowSm],
-                ),
-                child: Icon(Icons.person_outline_rounded,
-                    color: inkColor, size: 22),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: surfaceColor,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: lineColor),
+                      boxShadow: [shadowSm],
+                    ),
+                    child: Icon(Icons.person_outline_rounded,
+                        color: inkColor, size: 22),
+                  ),
+                  Positioned(
+                    right: -3, top: -3,
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: NotificationService.instance.totalBadge,
+                      builder: (_, n, __) {
+                        if (n == 0) return const SizedBox.shrink();
+                        return Container(
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                          decoration: BoxDecoration(
+                            color: red, shape: BoxShape.circle,
+                            border: Border.all(color: bgColor, width: 1.5),
+                          ),
+                          child: Text(n > 9 ? '9+' : '$n',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.white,
+                                  fontSize: 9, fontWeight: FontWeight.w800)),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

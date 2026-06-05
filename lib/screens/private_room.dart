@@ -3,21 +3,12 @@ import 'dart:math';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../functions/arcade_service.dart';
+import '../functions/game_launcher.dart';
 import '../helpers/color.dart';
 import '../helpers/constant.dart';
-import '../screens/arcade_lobby.dart';
-import '../screens/games/battleship_game.dart';
-import '../screens/games/checkers_game.dart';
-import '../screens/games/connect4_game.dart';
-import '../screens/games/dots_boxes_game.dart';
-import '../screens/games/gomoku_game.dart';
-import '../screens/games/rps_game.dart';
-import '../screens/multiplayer.dart';
 import '../widgets/xo_logo.dart';
 import '../screens/splash.dart';
 
@@ -191,51 +182,16 @@ class _CreateRoomState extends State<_CreateRoom> {
 
     final db = FirebaseDatabase.instance;
 
-    // Atomic coin check + deduction
-    TransactionResult? coinTx;
-    try {
-      coinTx = await db.ref().child('users').child(uid).child('coin')
-          .runTransaction((v) {
-        final coins = v as int? ?? 0;
-        if (coins < fixedEntryFee) return Transaction.abort();
-        return Transaction.success(coins - fixedEntryFee);
-      });
-    } catch (_) {}
-
-    if (coinTx == null || !coinTx.committed) {
+    // Atomic coin check + deduction + game-node creation (shared logic).
+    final gameKey = await GameLauncher.createGameNode(gameType);
+    if (gameKey == null) {
       if (mounted) setState(() { _stage = 'select'; _error = 'Not enough coins!'; });
       return;
     }
 
     final code = _genCode();
-    String gameKey;
 
     try {
-      if (gameType == 'xo') {
-        final ref = db.ref().child('Game').push();
-        gameKey = ref.key!;
-        final firstTry = Random().nextBool() ? 'player1' : 'player2';
-        await ref.set({
-          'player1': {'id': uid, 'won': 0},
-          'player2': {'id': '', 'won': 0},
-          'status': 'pending',
-          'entryFee': fixedEntryFee,
-          'round': fixedRounds,
-          'matrixSize': 'Three',
-          'try': firstTry,
-          'time': DateTime.now().toUtc().toString(),
-        });
-      } else {
-        final ref = db.ref().child('arcadeGames').child(gameType).push();
-        gameKey = ref.key!;
-        await ref.set({
-          'type': gameType, 'p1': uid, 'p2': '',
-          'status': 'waiting', 'entryFee': fixedEntryFee,
-          'winner': '', 'state': ArcadeService.initialState(gameType),
-          'createdAt': DateTime.now().toUtc().toString(),
-        });
-      }
-
       await db.ref().child('privateLobbies').child(code).set({
         'gameKey': gameKey,
         'gameType': gameType,
@@ -372,47 +328,18 @@ class _CreateRoomState extends State<_CreateRoom> {
     required String oppPic,
   }) async {
     if (!mounted) return;
-
-    if (gameType == 'xo') {
-      bool goesFirst = isP1;
-      try {
-        final db = FirebaseDatabase.instance;
-        final gs = await db.ref().child('Game').child(gameKey).once();
-        final gMap = (gs.snapshot.value as Map?) ?? {};
-        final slot = gMap['try']?.toString() ?? 'player1';
-        final us = await db.ref().child('Game').child(gameKey).child(slot).child('id').once();
-        goesFirst = us.snapshot.value?.toString() == myUid;
-      } catch (_) {}
-      if (!mounted) return;
-      Navigator.pushReplacement(context, CupertinoPageRoute(builder: (_) => MultiplayerScreen(
-        gameKey: gameKey,
-        firstTry: goesFirst,
-        oppornentName: oppName,
-        oppornentPic: oppPic,
-        round: fixedRounds,
-        imagex: _imagex,
-        imageo: _imageo,
-        matrixSize: 'Three',
-      )));
-      return;
-    }
-
-    if (!mounted) return;
-    final args = GameArgs(
-      gameId: gameKey, type: gameType, isP1: isP1,
-      oppId: oppUid, oppName: oppName, entryFee: fixedEntryFee,
+    await GameLauncher.launchGame(
+      context,
+      gameType: gameType,
+      gameKey: gameKey,
+      isP1: isP1,
+      myUid: myUid,
+      oppUid: oppUid,
+      oppName: oppName,
+      oppPic: oppPic,
+      imagex: _imagex,
+      imageo: _imageo,
     );
-    Widget screen;
-    switch (gameType) {
-      case 'rps':        screen = RpsGameScreen(args: args); break;
-      case 'connect4':   screen = Connect4GameScreen(args: args); break;
-      case 'gomoku':     screen = GomokuGameScreen(args: args); break;
-      case 'dotsboxes':  screen = DotsBoxesGameScreen(args: args); break;
-      case 'checkers':   screen = CheckersGameScreen(args: args); break;
-      case 'battleship': screen = BattleshipGameScreen(args: args); break;
-      default: return;
-    }
-    Navigator.pushReplacement(context, CupertinoPageRoute(builder: (_) => screen));
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -831,52 +758,18 @@ class _JoinRoomState extends State<_JoinRoom> {
     required String oppPic,
   }) async {
     if (!mounted) return;
-
-    if (gameType == 'xo') {
-      bool goesFirst = isP1;
-      try {
-        final db = FirebaseDatabase.instance;
-        final gs = await db.ref().child('Game').child(gameKey).once();
-        final gMap = (gs.snapshot.value as Map?) ?? {};
-        final slot = gMap['try']?.toString() ?? 'player1';
-        final us = await db.ref()
-            .child('Game').child(gameKey).child(slot).child('id').once();
-        goesFirst = us.snapshot.value?.toString() == myUid;
-      } catch (_) {}
-      if (!mounted) return;
-      Navigator.pushReplacement(
-          context,
-          CupertinoPageRoute(
-              builder: (_) => MultiplayerScreen(
-                    gameKey: gameKey,
-                    firstTry: goesFirst,
-                    oppornentName: oppName,
-                    oppornentPic: oppPic,
-                    round: fixedRounds,
-                    imagex: _imagex,
-                    imageo: _imageo,
-                    matrixSize: 'Three',
-                  )));
-      return;
-    }
-
-    if (!mounted) return;
-    final args = GameArgs(
-      gameId: gameKey, type: gameType, isP1: isP1,
-      oppId: oppUid, oppName: oppName, entryFee: fixedEntryFee,
+    await GameLauncher.launchGame(
+      context,
+      gameType: gameType,
+      gameKey: gameKey,
+      isP1: isP1,
+      myUid: myUid,
+      oppUid: oppUid,
+      oppName: oppName,
+      oppPic: oppPic,
+      imagex: _imagex,
+      imageo: _imageo,
     );
-    Widget screen;
-    switch (gameType) {
-      case 'rps':        screen = RpsGameScreen(args: args); break;
-      case 'connect4':   screen = Connect4GameScreen(args: args); break;
-      case 'gomoku':     screen = GomokuGameScreen(args: args); break;
-      case 'dotsboxes':  screen = DotsBoxesGameScreen(args: args); break;
-      case 'checkers':   screen = CheckersGameScreen(args: args); break;
-      case 'battleship': screen = BattleshipGameScreen(args: args); break;
-      default: return;
-    }
-    Navigator.pushReplacement(
-        context, CupertinoPageRoute(builder: (_) => screen));
   }
 
   @override

@@ -20,11 +20,13 @@ import '../functions/dialoges.dart';
 import '../functions/getCoin.dart';
 import '../functions/playbgm.dart';
 import '../main.dart';
+import 'friends.dart';
 import 'game_history.dart';
 import 'how_to_play.dart';
 import 'login_with_email.dart';
 import 'privacy_policy.dart';
 import 'splash.dart';
+import 'tag_picker.dart';
 
 class Profile extends StatefulWidget {
   @override
@@ -169,6 +171,30 @@ class _ProfileBodyState extends State<Profile>
                         ),
                       ),
                     ]),
+                    if (!_auth.currentUser!.isAnonymous)
+                      _buildSection('Social', [
+                        _SettingsRow(
+                          icon: Icons.people_rounded,
+                          iconColor: xColor,
+                          title: 'Friends',
+                          onTap: () {
+                            music.play(click);
+                            Navigator.of(context).push(CupertinoPageRoute(
+                                builder: (_) => const FriendsScreen()));
+                          },
+                        ),
+                        _SettingsRow(
+                          icon: Icons.tag_rounded,
+                          iconColor: oColor,
+                          title: 'My Game Tags',
+                          onTap: () {
+                            music.play(click);
+                            Navigator.of(context).push(CupertinoPageRoute(
+                                builder: (_) => const TagPickerScreen()));
+                          },
+                          isLast: true,
+                        ),
+                      ]),
                     _buildSection('Account', [
                       if (!_auth.currentUser!.isAnonymous) ...[
                         _SettingsRow(

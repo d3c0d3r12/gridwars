@@ -1,5 +1,6 @@
 import 'package:xobattle/screens/arcade.dart';
 import 'package:xobattle/screens/daily_challenge.dart';
+import 'package:xobattle/screens/friends.dart';
 import 'package:xobattle/screens/game_history.dart';
 import 'package:xobattle/screens/home_screen.dart';
 import 'package:xobattle/screens/leaderboard.dart';
@@ -23,5 +24,6 @@ class Routes {
     "/privateroom":     (context) => const PrivateRoomScreen(),
     "/dailychallenge":  (context) => const DailyChallengeScreen(),
     "/arcade":          (context) => const ArcadeScreen(),
+    "/friends":         (context) => const FriendsScreen(),
   };
 }
