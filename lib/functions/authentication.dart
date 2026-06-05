@@ -85,26 +85,36 @@ class Auth {
     var credential, displayName, user;
     Utils localValue = Utils();
     if (platform == "Android" && email == "" && password == "") {
-      // Show loading immediately so user knows something is happening
       Dialogue.loading(context);
       try {
         final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
         final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
-        final _scopes = ['profile', 'email'];
+        const _webClientId =
+            '555056909258-sn4jk6tr3r5mjv1mjrrod6letpqocieb.apps.googleusercontent.com';
 
-        // initialize() must only be called once — ignore if already done
+        // initialize() must only be called once per app session.
         try {
-          await _googleSignIn.initialize();
+          await _googleSignIn.initialize(serverClientId: _webClientId);
         } catch (_) {}
 
         final account = await _googleSignIn.authenticate();
 
+        // idToken is provided by the Credential Manager flow on Android.
+        final idToken = account.authentication.idToken;
+        if (idToken == null || idToken.isEmpty) {
+          throw Exception('Google returned no ID token. '
+              'Ensure the debug SHA-1 fingerprint is registered in Firebase Console.');
+        }
+
+        // accessToken is fetched via the authorization client.
+        final _scopes = ['profile', 'email'];
         GoogleSignInClientAuthorization? auth;
-        auth = await account.authorizationClient.authorizationForScopes(_scopes);
+        auth = await account.authorizationClient
+            .authorizationForScopes(_scopes);
         auth ??= await account.authorizationClient.authorizeScopes(_scopes);
 
         final credentials = GoogleAuthProvider.credential(
-          idToken: account.authentication.idToken,
+          idToken: idToken,
           accessToken: auth.accessToken,
         );
 
@@ -118,20 +128,28 @@ class Auth {
               .pushNamedAndRemoveUntil('/home', (route) => false);
         }
       } catch (e) {
-        // Close the loading dialog
         if (context.mounted && Navigator.canPop(context)) {
           Navigator.pop(context);
         }
-        // Show the actual error so we know what's wrong
         if (context.mounted) {
           final msg = e.toString().toLowerCase();
-          final displayMsg = (msg.contains('cancel') || msg.contains('dismiss'))
-              ? 'Sign-in cancelled'
-              : 'Google Sign-In failed. Please try again.';
+          String displayMsg;
+          if (msg.contains('cancel') || msg.contains('dismiss')) {
+            displayMsg = 'Sign-in cancelled.';
+          } else if (msg.contains('sha') || msg.contains('id token') ||
+              msg.contains('serverclientid') || msg.contains('configuration')) {
+            displayMsg =
+                'Google Sign-In not configured for this build. '
+                'Add the debug SHA-1 in Firebase Console.';
+          } else if (msg.contains('network') || msg.contains('timeout')) {
+            displayMsg = 'Network error. Check your connection and try again.';
+          } else {
+            displayMsg = 'Google Sign-In failed. Please try again.';
+          }
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(displayMsg),
             backgroundColor: Colors.redAccent,
-            duration: Duration(seconds: 4),
+            duration: const Duration(seconds: 5),
           ));
         }
       }

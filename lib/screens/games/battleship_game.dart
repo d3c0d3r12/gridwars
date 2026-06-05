@@ -5,7 +5,6 @@ import '../../functions/arcade_service.dart';
 import '../../helpers/color.dart';
 import '../../helpers/constant.dart';
 import '../../helpers/utils.dart';
-import '../../screens/splash.dart' show utils;
 import 'game_widgets.dart';
 import '../../screens/arcade_lobby.dart';
 
@@ -23,6 +22,7 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
   String _phase = 'placement';
   int _turn = 1, _myHits = 0, _oppHits = 0;
   bool _myReady = false, _oppReady = false, _gameOver = false;
+  bool _abandoned = false;
   bool _disposed = false;
   StreamSubscription? _sub;
   StreamSubscription? _statusSub;
@@ -93,15 +93,27 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
   }
 
   void _abandonGame() async {
-    if (_gameOver || _disposed) return;
+    if (_abandoned || _disposed) return;
+    _abandoned = true;
     setState(() => _gameOver = true);
     _sub?.cancel();
     _statusSub?.cancel();
     await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
-    if (mounted && !_disposed) Navigator.pop(context);
+    if (mounted && !_disposed) {
+      Navigator.of(context).popUntil((route) => route is PageRoute);
+      Navigator.of(context).pop();
+    }
   }
 
-  void _handleExit() => showLeaveConfirmDialog(context, _abandonGame);
+  void _handleExit() {
+    if (!mounted) return;
+    if (_gameOver) {
+      Navigator.of(context).popUntil((route) => route is PageRoute);
+      Navigator.of(context).pop();
+      return;
+    }
+    showLeaveConfirmDialog(context, _abandonGame);
+  }
 
   bool get _myTurn => _turn == _myNum && _phase == 'attack' && !_gameOver;
 

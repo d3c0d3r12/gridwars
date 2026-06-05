@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../helpers/color.dart';
 import '../helpers/constant.dart';
 import '../helpers/utils.dart';
-import '../screens/splash.dart';
 
 // 31 daily puzzles — one per day of month.
 // Board: 9 cells ('X' / 'O' / '').  winMove = correct index for X to win.
@@ -17,38 +16,40 @@ class _Puzzle {
   const _Puzzle(this.board, this.winMove, this.hint);
 }
 
+// All 31 puzzles validated: winMove cell is empty, neither side already wins,
+// and placing X at winMove always completes the named line.
 const _puzzles = [
-  _Puzzle(['X','O','X','O','X','O','','',''], 6, 'Complete the diagonal!'),
-  _Puzzle(['O','X','O','X','X','','O','',''], 5, 'Win in the middle row!'),
-  _Puzzle(['X','','X','O','O','','','',''], 1, 'Win with the top row!'),
-  _Puzzle(['','X','O','X','O','','X','',''], 8, 'Complete the anti-diagonal!'),
-  _Puzzle(['X','O','','O','X','','','',''], 8, 'Win with the main diagonal!'),
-  _Puzzle(['O','O','','X','X','','','',''], 5, 'Block and win!'),
-  _Puzzle(['X','','','X','O','O','X','',''], 7, 'Win the first column!'),
-  _Puzzle(['','','X','O','X','O','','','X'], 6, 'Spot the winning move!'),
-  _Puzzle(['X','O','X','','O','','','O','X'], 3, 'Block the column!'),
-  _Puzzle(['O','X','O','','X','','','X',''], 6, 'Win the middle column!'),
-  _Puzzle(['X','X','','O','O','','','',''], 2, 'Complete the row!'),
-  _Puzzle(['','O','X','O','X','','X','',''], 7, 'Build your diagonal!'),
-  _Puzzle(['X','O','O','','X','','','','X'], 3, 'Win with the diagonal!'),
-  _Puzzle(['O','','O','X','X','','','',''], 5, 'Complete and win!'),
-  _Puzzle(['X','','','O','X','O','','','X'], 1, 'Find the winning gap!'),
-  _Puzzle(['','X','O','X','O','','X','',''], 8, 'Win the last diagonal!'),
-  _Puzzle(['X','O','X','O','','X','','O',''], 4, 'Center wins!'),
-  _Puzzle(['O','X','','','X','O','X','',''], 8, 'Complete the column!'),
-  _Puzzle(['X','','X','O','O','','','',''], 1, 'Middle of the row!'),
-  _Puzzle(['','O','O','X','X','','X','',''], 5, 'Row or column?'),
-  _Puzzle(['X','O','X','','O','O','X','',''], 7, 'Block and take the win!'),
-  _Puzzle(['O','X','O','X','','','','X',''], 4, 'Take the center!'),
-  _Puzzle(['X','O','','X','O','','X','',''], 7, 'Finish the column!'),
-  _Puzzle(['','X','X','O','O','','','',''], 0, 'Complete the row!'),
-  _Puzzle(['X','','O','','X','O','O','','X'], 1, 'Spot the diagonal!'),
-  _Puzzle(['','O','X','O','X','','X','',''], 8, 'Win the corner!'),
-  _Puzzle(['X','X','','O','O','','','',''], 2, 'Top row wins!'),
-  _Puzzle(['','X','O','X','O','O','X','',''], 7, 'Column victory!'),
-  _Puzzle(['O','','X','X','X','','O','O',''], 5, 'Middle row wins!'),
-  _Puzzle(['X','O','O','X','','O','X','',''], 7, 'Finish the column!'),
-  _Puzzle(['O','X','X','O','O','','X','','X'], 5, 'Block and win!'),
+  _Puzzle(['','','O','X','O','','X','',''], 0, 'Complete the left column!'),
+  _Puzzle(['','O','O','','','','X','X',''], 8, 'Complete the bottom row!'),
+  _Puzzle(['','X','O','','X','O','','',''], 7, 'Complete the middle column!'),
+  _Puzzle(['O','','X','','','X','O','',''], 8, 'Complete the right column!'),
+  _Puzzle(['','','','O','X','O','','','X'], 0, 'Complete the main diagonal!'),
+  _Puzzle(['','','','','X','X','O','O',''], 3, 'Complete the middle row!'),
+  _Puzzle(['','','','','X','O','X','O',''], 2, 'Complete the anti-diagonal!'),
+  _Puzzle(['','X','X','','','','O','O',''], 0, 'Complete the top row!'),
+  _Puzzle(['','','O','X','','','X','O',''], 0, 'Complete the left column!'),
+  _Puzzle(['','','O','O','','','X','','X'], 7, 'Complete the bottom row!'),
+  _Puzzle(['O','X','','','X','','','','O'], 7, 'Complete the middle column!'),
+  _Puzzle(['O','','','','','X','','O','X'], 2, 'Complete the right column!'),
+  _Puzzle(['X','O','','','X','O','','',''], 8, 'Complete the main diagonal!'),
+  _Puzzle(['','','O','X','','X','','','O'], 4, 'Complete the middle row!'),
+  _Puzzle(['O','','X','O','X','','','',''], 6, 'Complete the anti-diagonal!'),
+  _Puzzle(['X','X','','','','','','O','O'], 2, 'Complete the top row!'),
+  _Puzzle(['X','','','X','O','O','','',''], 6, 'Complete the left column!'),
+  _Puzzle(['','O','','O','','','X','','X'], 7, 'Complete the bottom row!'),
+  _Puzzle(['','','','','X','','O','X','O'], 1, 'Complete the middle column!'),
+  _Puzzle(['','','','O','','X','O','','X'], 2, 'Complete the right column!'),
+  _Puzzle(['X','','O','','X','','','O',''], 8, 'Complete the main diagonal!'),
+  _Puzzle(['','O','','','X','X','','O',''], 3, 'Complete the middle row!'),
+  _Puzzle(['O','','X','','','O','X','',''], 4, 'Complete the anti-diagonal!'),
+  _Puzzle(['X','','X','O','','O','','',''], 1, 'Complete the top row!'),
+  _Puzzle(['X','','O','X','','','','O',''], 6, 'Complete the left column!'),
+  _Puzzle(['','','','','O','O','X','','X'], 7, 'Complete the bottom row!'),
+  _Puzzle(['O','','','','X','','O','X',''], 1, 'Complete the middle column!'),
+  _Puzzle(['','O','','','','X','O','','X'], 2, 'Complete the right column!'),
+  _Puzzle(['X','O','','','','O','','','X'], 4, 'Complete the main diagonal!'),
+  _Puzzle(['O','','','','X','X','O','',''], 3, 'Complete the middle row!'),
+  _Puzzle(['','O','X','O','X','','','',''], 6, 'Complete the anti-diagonal!'),
 ];
 
 class DailyChallengeScreen extends StatefulWidget {

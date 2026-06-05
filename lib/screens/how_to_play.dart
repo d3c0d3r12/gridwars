@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../widgets/xo_logo.dart';
 
 import '../helpers/color.dart';
-import '../helpers/constant.dart';
 import 'home_screen.dart';
 import 'splash.dart';
 

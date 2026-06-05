@@ -26,7 +26,6 @@ class XOBattleLogo extends StatelessWidget {
 typedef ChillingZoneLogo = XOBattleLogo;
 
 class _CZLogoPainter extends CustomPainter {
-  static const _slate  = Color(0xFF1A2B3C);   // C letter — dark slate
   static const _teal   = Color(0xFF00B8D4);   // Z lightning — teal
   static const _tealLt = Color(0xFF4DD0E1);   // Z highlight
   static const _indigo = Color(0xFF4B4EE6);   // X accent
@@ -150,11 +149,7 @@ class _CZLogoPainter extends CustomPainter {
     // Top bar of Z
     final t1 = Offset(w * 0.52, h * 0.22);
     final t2 = Offset(w * 0.82, h * 0.22);
-    // Diagonal
-    final d1 = t2;
     final d2 = Offset(w * 0.42, h * 0.78);
-    // Bottom bar of Z
-    final b1 = d2;
     final b2 = Offset(w * 0.78, h * 0.78);
 
     zPath.moveTo(t1.dx, t1.dy);

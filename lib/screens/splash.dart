@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -8,6 +9,7 @@ import '../helpers/color.dart';
 import '../helpers/constant.dart';
 import '../helpers/utils.dart';
 import '../widgets/xo_logo.dart';
+import 'admin_panel.dart';
 
 Utils utils = Utils();
 
@@ -284,6 +286,27 @@ class _SplashScreenState extends State<SplashScreen>
       await utils.setUserLoggedIn("isLoggedIn", true);
     }
     if (!mounted) return;
+
+    // Ban check: if logged in, verify user is not banned before reaching home.
+    if (loggedIn && firebaseUser != null) {
+      try {
+        final snap = await FirebaseDatabase.instance
+            .ref()
+            .child('users')
+            .child(firebaseUser.uid)
+            .once();
+        final data = snap.snapshot.value as Map?;
+        if (data != null && data['banned'] == true) {
+          final reason = data['banReason']?.toString() ?? '';
+          if (mounted) {
+            Navigator.of(context).pushReplacement(MaterialPageRoute(
+                builder: (_) => BannedScreen(reason: reason)));
+          }
+          return;
+        }
+      } catch (_) {}
+    }
+
     utils.replaceScreenAfter(
         context, loggedIn ? "/home" : "/authscreen");
   }

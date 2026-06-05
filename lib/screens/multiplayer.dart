@@ -216,6 +216,9 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
   int _consecutiveDraws = 0;
   bool _suddenDeathShowing = false;
 
+  // Prevents onWin from double-firing within the same round
+  bool _roundOver = false;
+
   @override
   void initState() {
     super.initState();
@@ -312,11 +315,25 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
       ).then((_) => _doubleDialogShowing = false);
     });
 
-    Multiplayer.updateLocalList(widget.gameKey, _ins, (ev) async {
-      music.play(dice);
-      buttons[int.parse(ev.snapshot.key.trim())] = await ev.snapshot.value;
+    Multiplayer.updateLocalList(widget.gameKey, _ins, (ev) {
+      final idx = int.parse(ev.snapshot.key.trim());
+      final incoming = ev.snapshot.value;
+      if (incoming == null) return;
+      final incomingMap = Map<String, dynamic>.from(incoming as Map);
+
+      // If we already set this button locally (optimistic update), skip the
+      // extra setState — the UI is already correct, no rebuild needed.
+      final alreadySet = buttons[idx] != null &&
+          buttons[idx]['state'] == incomingMap['state'] &&
+          buttons[idx]['player'] == incomingMap['player'];
+
+      buttons[idx] = incomingMap;
       status();
-      setState(() {});
+
+      if (!alreadySet && mounted) {
+        music.play(dice);
+        setState(() {});
+      }
     });
 
     getuserDetails();
@@ -399,35 +416,218 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
       widget.matrixSize,
       gameStatus,
       onWin: (int currentIndex) async {
-        uid = await getUidByPlayer(
-            buttons[winningConditionToUse[currentIndex][1]]["player"]);
+        // Guard: only the first caller per round proceeds.
+        if (_roundOver || !mounted) return;
+        _roundOver = true;
 
-        DatabaseEvent winCount = await _ins
-            .ref()
-            .child("Game")
-            .child(widget.gameKey)
-            .child(buttons[winningConditionToUse[currentIndex][1]]["player"])
-            .child("won")
-            .once();
+        // Use the winner's actual slot from buttons (not playerValue which may
+        // have already been updated by a concurrent 'try' change event).
+        final winnerSlot =
+            buttons[winningConditionToUse[currentIndex][1]]["player"] as String;
 
-        var currentWinCount = winCount.snapshot.value != null
-            ? int.parse(winCount.snapshot.value.toString())
-            : 0;
+        uid = await getUidByPlayer(winnerSlot);
+        if (!mounted) return;
 
-        var kUid = _auth.currentUser!.uid;
-        if (uid == kUid) {
-          _consecutiveDraws = 0;
-          try {
-            await _ins
-                .ref()
-                .child("Game")
-                .child(widget.gameKey)
-                .child(playerValue!)
-                .update({"won": currentWinCount + 1});
-          } catch (e) {
-            return;
-          }
+        final kUid = _auth.currentUser!.uid;
+        final iWon = uid == kUid;
+        winGame = iWon;
+
+        // Update local win counts immediately on both sides.
+        if (winnerSlot == "player1") {
+          win1Count++;
+        } else {
+          win2Count++;
         }
+
+        iWon ? music.play(wingame) : music.play(losegame);
+        _stopTimer();
+        if (mounted) setState(() {});
+
+        // Winner atomically records the win in Firebase — fire-and-forget.
+        // The game-end sequence no longer depends on this write succeeding.
+        if (iWon) {
+          _consecutiveDraws = 0;
+          _gameRef
+              .child(widget.gameKey)
+              .child(winnerSlot)
+              .child("won")
+              .runTransaction(
+                  (v) => Transaction.success((v as int? ?? 0) + 1))
+              .ignore();
+        }
+
+        // Both sides drive the round-end sequence after the 3s win animation.
+        // This removes the dependency on the Firebase 'player1/player2' event
+        // that was previously the only trigger — if the write above failed,
+        // both devices would be stuck indefinitely.
+        final capturedUid = uid!;
+        Timer(const Duration(seconds: 3), () async {
+          if (!mounted) return;
+          winVar1 = null;
+          winVar2 = null;
+          winVar3 = null;
+          winGame = null;
+
+          final r = await _gameRef
+              .child(widget.gameKey)
+              .child("entryFee")
+              .once();
+          if (!mounted) return;
+          final entryFee = int.parse(r.snapshot.value.toString());
+
+          if (curRound != widget.round) {
+            // Reset board in Firebase for the next round.
+            initializeButtons();
+            for (int i = 0; i < buttons.length; i++) {
+              _gameRef
+                  .child(widget.gameKey)
+                  .child("buttons")
+                  .child("$i")
+                  .update({"player": "0", "state": ""}).catchError((_) {});
+            }
+          }
+
+          if (widget.round == curRound) {
+            // ── Final round ──────────────────────────────────────────
+            _gameRef
+                .child(widget.gameKey)
+                .update({"status": "closed"});
+            closedByUs = true;
+            if (mounted) setState(() {});
+
+            DatabaseEvent playersData =
+                await _gameRef.child(widget.gameKey).once();
+            if (!mounted) return;
+
+            String winnerId, looserId;
+            if (win1Count > win2Count) {
+              winnerId = (playersData.snapshot.value
+                  as Map)["player1"]["id"] as String;
+              looserId = (playersData.snapshot.value
+                  as Map)["player2"]["id"] as String;
+            } else if (win2Count > win1Count) {
+              winnerId = (playersData.snapshot.value
+                  as Map)["player2"]["id"] as String;
+              looserId = (playersData.snapshot.value
+                  as Map)["player1"]["id"] as String;
+            } else {
+              winnerId = "";
+              looserId = "";
+            }
+
+            if (winnerId.isEmpty) {
+              await updateTieCoin(_auth.currentUser!.uid, entryFee);
+              Dialogue().tieMultiplayer(context, widget.gameKey);
+            } else {
+              final winText = winnerId == kUid
+                  ? utils.getTranslated(context, "priceWin")
+                  : utils.getTranslated(context, "youLose");
+              final point = winnerId == kUid
+                  ? (entryFee * 2).toString()
+                  : entryFee.toString();
+              Dialogue.winner(
+                context,
+                winnerId == kUid
+                    ? username
+                    : utils.limitChar(widget.oppornentName, 15),
+                winnerId == kUid ? profilePic : widget.oppornentPic,
+                winText,
+                point,
+                widget.gameKey,
+              );
+              if (winnerId == kUid) {
+                History().update(
+                    uid: winnerId,
+                    date: DateTime.now().toString(),
+                    gameid: widget.gameKey,
+                    gotcoin: entryFee * 2,
+                    oppornentId: looserId,
+                    status: "Won",
+                    type: "GAME");
+                History().update(
+                    uid: looserId,
+                    date: DateTime.now().toString(),
+                    gameid: widget.gameKey,
+                    gotcoin: -entryFee,
+                    oppornentId: winnerId,
+                    status: "Lose",
+                    type: "GAME");
+                await Future.wait([
+                  multi.updateMatchResult(winnerId, MatchResult.win),
+                  multi.updateMatchResult(looserId, MatchResult.lose),
+                  updateCoin(winnerId, entryFee),
+                ]);
+              }
+            }
+            if (widget.gameKey != null) {
+              Dialogue.removeChild("Game", widget.gameKey);
+            }
+          } else if (win1Count > (widget.round / 2) ||
+              win2Count > (widget.round / 2)) {
+            // ── Early decisive win ───────────────────────────────────
+            final winnerId =
+                win1Count > win2Count ? player1Id! : player2Id!;
+            final looserId =
+                winnerId == player1Id ? player2Id! : player1Id!;
+
+            _gameRef
+                .child(widget.gameKey)
+                .update({"status": "closed"});
+            closedByUs = true;
+            if (mounted) setState(() {});
+
+            final winText = winnerId == kUid
+                ? utils.getTranslated(context, "priceWin")
+                : utils.getTranslated(context, "youLose");
+            final point = winnerId == kUid
+                ? (entryFee * 2).toString()
+                : entryFee.toString();
+            Dialogue.winner(
+              context,
+              winnerId == kUid
+                  ? username
+                  : utils.limitChar(widget.oppornentName, 15),
+              winnerId == kUid ? profilePic : widget.oppornentPic,
+              winText,
+              point,
+              widget.gameKey,
+            );
+            if (winnerId == kUid) {
+              History().update(
+                  uid: winnerId,
+                  date: DateTime.now().toString(),
+                  gameid: widget.gameKey,
+                  gotcoin: entryFee * 2,
+                  oppornentId: looserId,
+                  status: "Won",
+                  type: "GAME");
+              History().update(
+                  uid: looserId,
+                  date: DateTime.now().toString(),
+                  gameid: widget.gameKey,
+                  gotcoin: -entryFee,
+                  oppornentId: winnerId,
+                  status: "Lose",
+                  type: "GAME");
+              await Future.wait([
+                multi.updateMatchResult(winnerId, MatchResult.win),
+                multi.updateMatchResult(looserId, MatchResult.lose),
+                updateCoin(winnerId, entryFee),
+              ]);
+            }
+            if (widget.gameKey != null) {
+              Dialogue.removeChild("Game", widget.gameKey);
+            }
+          } else {
+            // ── More rounds to play ───────────────────────────────────
+            _stopTimer();
+            nextRoundDialog(
+              capturedUid == kUid
+                  ? "$username won"
+                  : "${utils.limitChar(widget.oppornentName, 15)} won",
+            );
+          }
+        });
       },
       onTie: (i) {
         tieCount += 1;
@@ -452,7 +652,9 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
 
     final currentPlayerValue = playerValue;
     final currentGameKey = widget.gameKey;
+    final nextTry = currentPlayerValue == "player1" ? "player2" : "player1";
 
+    // Optimistic local update — instant visual response before Firebase confirms.
     buttons[i]["state"] = "true";
     buttons[i]["player"] = "$currentPlayerValue";
     yourTry = false;
@@ -461,14 +663,11 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
     music.play(dice);
 
     try {
-      await _gameRef
-          .child(currentGameKey)
-          .child("buttons")
-          .child("$i")
-          .update({"player": currentPlayerValue, "state": "true"});
-
+      // Single atomic write: button + turn switch in one round trip.
       await _gameRef.child(currentGameKey).update({
-        "try": currentPlayerValue == "player1" ? "player2" : "player1",
+        "buttons/$i/player": currentPlayerValue,
+        "buttons/$i/state": "true",
+        "try": nextTry,
       });
     } catch (e) {
       if (mounted) {
@@ -579,231 +778,9 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
         }
       }
 
-      if (event.snapshot.key == "player2" || event.snapshot.key == "player1") {
-        DatabaseEvent snap = await _gameRef
-            .child(widget.gameKey)
-            .child(event.snapshot.key!)
-            .child("id")
-            .once();
-        if (mounted) {
-          snap.snapshot.value == _auth.currentUser!.uid
-              ? music.play(wingame)
-              : music.play(losegame);
-        }
-
-        _stopTimer();
-
-        DatabaseEvent p1Count = await _gameRef
-            .child(widget.gameKey)
-            .child("player1")
-            .child("won")
-            .once();
-
-        win1Count = int.parse(p1Count.snapshot.value.toString());
-
-        DatabaseEvent p2Count = await _gameRef
-            .child(widget.gameKey)
-            .child("player2")
-            .child("won")
-            .once();
-
-        win2Count = int.parse(p2Count.snapshot.value.toString());
-
-        snap.snapshot.value == _auth.currentUser!.uid
-            ? winGame = true
-            : winGame = false;
-
-        Timer(Duration(seconds: 3), () async {
-          winVar1 = null;
-          winVar2 = null;
-          winVar3 = null;
-          winGame = null;
-
-          DatabaseEvent r = await FirebaseDatabase.instance
-              .ref()
-              .child("Game")
-              .child(widget.gameKey)
-              .child("entryFee")
-              .once();
-
-          if (curRound != widget.round) {
-            initializeButtons();
-            for (int i = 0; i < buttons.length; i++) {
-              _gameRef
-                  .child(widget.gameKey)
-                  .child("buttons")
-                  .child("$i")
-                  .update({"player": "0", "state": ""})
-                  .then((_) {})
-                  .catchError((error) {
-                return;
-              });
-            }
-          }
-
-          if (widget.round == curRound) {
-            _gameRef.child(widget.gameKey).update({"status": "closed"});
-            closedByUs = true;
-            setState(() {});
-
-            var winnerId, looserId;
-            String winText, point;
-
-            DatabaseEvent playersData =
-            await _gameRef.child(widget.gameKey).once();
-
-            if (win1Count > win2Count) {
-              winnerId = (playersData.snapshot.value as Map)["player1"]["id"];
-              looserId = (playersData.snapshot.value as Map)["player2"]["id"];
-            } else {
-              winnerId = (playersData.snapshot.value as Map)["player2"]["id"];
-              looserId = (playersData.snapshot.value as Map)["player1"]["id"];
-            }
-
-            if (win1Count == win2Count) {
-              winnerId = "";
-            }
-            if (winnerId != "") {
-              winText = winnerId == _auth.currentUser!.uid
-                  ? utils.getTranslated(context, "priceWin")
-                  : utils.getTranslated(context, "youLose");
-              point = winnerId == _auth.currentUser!.uid
-                  ? (int.parse(r.snapshot.value.toString()) * 2).toString()
-                  : r.snapshot.value.toString();
-
-              Dialogue.winner(
-                  context,
-                  winnerId == _auth.currentUser!.uid
-                      ? username
-                      : "${utils.limitChar(widget.oppornentName, 15)}",
-                  winnerId == _auth.currentUser!.uid
-                      ? profilePic
-                      : "${widget.oppornentPic}",
-                  winText,
-                  point,
-                  widget.gameKey);
-
-              var _tempData = (await _gameSnapshot)!.snapshot.value;
-
-              if (winnerId == _auth.currentUser!.uid) {
-                History().update(
-                    uid: winnerId,
-                    date: DateTime.now().toString(),
-                    gameid: widget.gameKey,
-                    gotcoin: (_tempData as Map)["entryFee"] * 2,
-                    oppornentId: looserId,
-                    status: "Won",
-                    type: "GAME");
-                History().update(
-                    uid: looserId,
-                    date: DateTime.now().toString(),
-                    gameid: widget.gameKey,
-                    gotcoin: -_tempData["entryFee"],
-                    oppornentId: winnerId,
-                    status: "Lose",
-                    type: "GAME");
-
-                await Future.wait([
-                  multi.updateMatchResult(winnerId, MatchResult.win),
-                  multi.updateMatchResult(looserId, MatchResult.lose),
-                  updateCoin(winnerId, int.parse(r.snapshot.value.toString())),
-                ]);
-              }
-            } else {
-              await updateTieCoin(_auth.currentUser!.uid, int.parse(r.snapshot.value.toString()));
-              Dialogue dialog = Dialogue();
-              dialog.tieMultiplayer(context, widget.gameKey);
-            }
-
-            if (widget.gameKey != null) {
-              Dialogue.removeChild("Game", widget.gameKey);
-            }
-          } else {
-            var winnerId = snap.snapshot.value;
-            var winText = winnerId == _auth.currentUser!.uid
-                ? utils.getTranslated(context, "priceWin")
-                : utils.getTranslated(context, "youLose");
-            var point = winnerId == _auth.currentUser!.uid
-                ? (int.parse(r.snapshot.value.toString()) * 2).toString()
-                : int.parse(r.snapshot.value.toString()).toString();
-
-            if (win1Count > (widget.round / 2) ||
-                win2Count > (widget.round / 2)) {
-              _gameRef.child(widget.gameKey).update({"status": "closed"});
-
-              closedByUs = true;
-              setState(() {});
-
-              var looserId;
-              DatabaseEvent data;
-
-              if (win1Count > win2Count) {
-                data = await _gameRef
-                    .child(widget.gameKey)
-                    .child("player2")
-                    .child("id")
-                    .once();
-                looserId = data.snapshot.value;
-              } else {
-                data = await _gameRef
-                    .child(widget.gameKey)
-                    .child("player1")
-                    .child("id")
-                    .once();
-                looserId = data.snapshot.value;
-              }
-              Dialogue.winner(
-                  context,
-                  winnerId == _auth.currentUser!.uid
-                      ? username
-                      : "${utils.limitChar(widget.oppornentName, 15)}",
-                  winnerId == _auth.currentUser!.uid
-                      ? profilePic
-                      : "${widget.oppornentPic}",
-                  winText,
-                  point,
-                  widget.gameKey);
-
-              var _tempData = (await _gameSnapshot)!.snapshot.value;
-              if (winnerId == _auth.currentUser!.uid) {
-                History().update(
-                    uid: winnerId,
-                    date: DateTime.now().toString(),
-                    gameid: widget.gameKey,
-                    gotcoin: (_tempData as Map)["entryFee"] * 2,
-                    oppornentId: looserId,
-                    status: "Won",
-                    type: "GAME");
-                History().update(
-                    uid: looserId,
-                    date: DateTime.now().toString(),
-                    gameid: widget.gameKey,
-                    gotcoin: -_tempData["entryFee"],
-                    oppornentId: winnerId,
-                    status: "Lose",
-                    type: "GAME");
-
-                await Future.wait([
-                  multi.updateMatchResult(winnerId.toString(), MatchResult.win),
-                  multi.updateMatchResult(looserId, MatchResult.lose),
-                  updateCoin(winnerId.toString(), int.parse(r.snapshot.value.toString())),
-                ]);
-              }
-
-              if (widget.gameKey != null) {
-                Dialogue.removeChild("Game", widget.gameKey);
-              }
-            } else {
-              _stopTimer();
-              nextRoundDialog(
-                winnerId == _auth.currentUser!.uid
-                    ? "$username won"
-                    : "${utils.limitChar(widget.oppornentName, 15)} won",
-              );
-            }
-          }
-        });
-      }
+      // player1/player2 'won' change — handled entirely by onWin() on both sides.
+      // Removed: delayed Firebase writes would re-trigger this after _roundOver
+      // reset, causing a second timer + dialog mid next-round (the stuck bug).
       if (event.snapshot.key == "tie") {
         if (widget.round == curRound) {
           DatabaseEvent idAndWinCountofPlayer1 = await _ins
@@ -977,6 +954,7 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
 
         if (mounted) {
           _startTimer();
+          _roundOver = false; // allow next round's win to be detected
           curRound = curRound + 1;
 
           if (widget.matrixSize == "Three") {
@@ -1354,16 +1332,21 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 30.0),
                 child: Center(
-                  child: GridView.builder(
+                  child: Builder(builder: (context) {
+                    // Compute once — not inside the item builder.
+                    final cellPad = MediaQuery.of(context).size.width * 0.05;
+                    return GridView.builder(
                     shrinkWrap: true,
-                    physics: NeverScrollableScrollPhysics(),
+                    physics: const NeverScrollableScrollPhysics(),
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: gridSize,
                         crossAxisSpacing: 10,
                         mainAxisSpacing: 10),
                     itemCount: totalCells,
                     itemBuilder: (context, i) {
-                      return GestureDetector(
+                      final isEmpty = buttons[i] == null || buttons[i]['state'] == "";
+                      return RepaintBoundary(
+                        child: GestureDetector(
                         onTap: () {
                           if (buttons[i] != null &&
                               (buttons[i]['state'] == '' ||
@@ -1381,12 +1364,12 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                           Align(
                             alignment: Alignment.bottomCenter,
                             child: Container(
-                              margin: EdgeInsets.only(
+                              margin: const EdgeInsets.only(
                                 left: 2,
                                 right: 2,
                                 top: 30,
                               ),
-                              decoration: BoxDecoration(
+                              decoration: const BoxDecoration(
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.white54,
@@ -1395,16 +1378,15 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                                     blurRadius: 7,
                                   ),
                                 ],
-                                borderRadius: BorderRadius.circular(40),
+                                borderRadius: BorderRadius.all(Radius.circular(40)),
                               ),
                             ),
                           ),
                           getSvgImage(imageName: 'grid_box', fit: BoxFit.fill),
-                          buttons[i] == null || buttons[i]['state'] == ""
+                          isEmpty
                               ? const SizedBox()
                               : Padding(
-                            padding: EdgeInsets.all(
-                                MediaQuery.of(context).size.width * 0.05),
+                            padding: EdgeInsets.all(cellPad),
                             child: getSvgImage(
                               imageName: returnImage(i),
                               height: double.maxFinite,
@@ -1413,9 +1395,10 @@ class _MultiplayerScreenActivityState extends State<MultiplayerScreenActivity> {
                             ),
                           ),
                         ]),
-                      );
+                      ));
                     },
-                  ),
+                  );
+                  }),
                 ),
               ),
             ),

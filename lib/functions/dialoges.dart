@@ -86,7 +86,7 @@ class Dialogue {
                           padding: const EdgeInsets.only(top: 6),
                           child: Text(winText, style: TextStyle(color: ink2Color, fontSize: 14), textAlign: TextAlign.center),
                         ),
-                      if (point != null && point!.isNotEmpty) ...[
+                      if (point != null && point.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -94,7 +94,7 @@ class Dialogue {
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
                             Icon(Icons.monetization_on_rounded, color: goldColor, size: 16),
                             const SizedBox(width: 5),
-                            Text(point!, style: TextStyle(color: const Color(0xFF9A6516), fontWeight: FontWeight.w700)),
+                            Text(point, style: TextStyle(color: const Color(0xFF9A6516), fontWeight: FontWeight.w700)),
                           ]),
                         ),
                       ],

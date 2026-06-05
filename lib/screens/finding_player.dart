@@ -165,11 +165,13 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                 var _snapkey = (_player2snap.snapshot.value as Map)["id"];
 
                 var oppornentDetail = await oppornentDetails(_snapkey);
+                if (!mounted) return;
                 var getFirstTry = await _ins
                     .ref()
                     .child("Game")
                     .child(data["roomKey"])
                     .once();
+                if (!mounted) return;
                 firstTry = (getFirstTry.snapshot.value as Map)["try"];
 
                 var getFirstTryId = await _ins
@@ -179,7 +181,11 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                     .child(firstTry!)
                     .child("id")
                     .once();
+                if (!mounted) return;
                 firstuid = getFirstTryId.snapshot.value;
+
+                // Cancel the no-opponent timer — we found one.
+                oppTimer?.cancel();
 
                 _opporentName = oppornentDetail["username"];
                 oppositPlayerName.value = _opporentName;
@@ -199,11 +205,12 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
 
         // If the player joined an existing game
         if (data['JoinStatus'] == JoinStatus.joined) {
-          //-- opponent details
           var details = await oppornentDetails(data["oppornentKey"]);
+          if (!mounted) return;
 
           var getFirstTry =
               await _ins.ref().child("Game").child(data["roomKey"]).once();
+          if (!mounted) return;
           firstTry = (getFirstTry.snapshot.value as Map)["try"];
 
           var getFirstTryId = await _ins
@@ -213,20 +220,24 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
               .child(firstTry!)
               .child("id")
               .once();
+          if (!mounted) return;
           firstuid = getFirstTryId.snapshot.value;
 
-          await Future.delayed(Duration(seconds: 1));
+          // Cancel the no-opponent timer — we already found one.
+          oppTimer?.cancel();
+
+          await Future.delayed(const Duration(seconds: 1));
+          if (!mounted) return;
+
           if (details != null) {
             _opporentName = details["username"];
             _opporentPic = details["profilePic"];
             gameKey = data["roomKey"];
             oppositPlayerName.value = _opporentName;
             keyOfGame.value = data["roomKey"];
-
-            // setState(() {});
           }
 
-          if (mounted) setState(() {});
+          setState(() {});
         }
 
         // If the game is still pending, attempt to find a game again
@@ -270,24 +281,31 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
   }
 
   canPlay(key) async {
+    if (!mounted || key == null || key.isEmpty) return;
     var _player1 =
         await _ins.ref().child("Game").child(key).child("player1").once();
+    if (!mounted) return;
     var _player2 =
         await _ins.ref().child("Game").child(key).child("player2").once();
+    if (!mounted) return;
 
-    var player1 = (_player1.snapshot.value as Map)["id"];
-    var player2 = (_player2.snapshot.value as Map)["id"];
+    final p1Val = _player1.snapshot.value;
+    final p2Val = _player2.snapshot.value;
+    if (p1Val == null || p2Val == null) { isplaying = false; return; }
+
+    var player1 = (p1Val as Map)["id"];
+    var player2 = (p2Val as Map)["id"];
 
     if (player1 == FirebaseAuth.instance.currentUser!.uid ||
         player2 == FirebaseAuth.instance.currentUser!.uid) {
       canUpdateUi = true;
+      if (mounted) setState(() {});
       changeScreen(context);
     } else {
       canUpdateUi = false;
+      isplaying = false;
       findGame();
-      // Navigator.pop(context);
     }
-    setState(() {});
   }
 
   @override
@@ -538,10 +556,13 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                                   img = "dora_findopponent";
                                   btnTxtKey = "cancel";
                                 });
-                                // Cancel existing timer BEFORE starting new one to prevent leak.
+                                // Cancel old listener and timer before re-searching.
+                                listen?.cancel();
+                                listen = null;
                                 oppTimer?.cancel();
+                                isplaying = false;
+                                oppositPlayerName.value = "";
                                 findGame();
-                                isplaying = false; // Allow canPlay to fire again after re-match.
                                 oppTimer = Timer(const Duration(seconds: 60), () {
                                   if (_temp != null) {
                                     Dialogue.removeChild("Game", _temp);

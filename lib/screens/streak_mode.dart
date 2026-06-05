@@ -10,7 +10,6 @@ import '../functions/ai.dart';
 import '../helpers/color.dart';
 import '../helpers/constant.dart';
 import '../helpers/utils.dart';
-import '../screens/splash.dart';
 
 class StreakModeScreen extends StatefulWidget {
   final String playerSkin;
@@ -33,7 +32,6 @@ class _StreakModeScreenState extends State<StreakModeScreen> with TickerProvider
   int _streak = 0;
   int _bestStreak = 0;
   int _totalCoinsEarned = 0;
-  int _consecutiveDraws = 0;
 
   late AnimationController _streakCtrl;
   late Animation<double> _streakScale;
@@ -122,10 +120,9 @@ class _StreakModeScreenState extends State<StreakModeScreen> with TickerProvider
     if (!_board.contains('')) {
       _gameOver = true;
       _status = 'Draw — next round!';
-      _consecutiveDraws++;
       if (mounted) setState(() {});
       Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) { _consecutiveDraws = 0; _startGame(); }
+        if (mounted) _startGame();
       });
       return true;
     }

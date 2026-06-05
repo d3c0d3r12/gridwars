@@ -20,7 +20,6 @@ import '../functions/dialoges.dart';
 import '../functions/getCoin.dart';
 import '../functions/playbgm.dart';
 import '../main.dart';
-import '../widgets/alert_dialogue.dart';
 import 'game_history.dart';
 import 'how_to_play.dart';
 import 'login_with_email.dart';

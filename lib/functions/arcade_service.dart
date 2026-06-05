@@ -129,30 +129,38 @@ class ArcadeService {
   static DatabaseReference stateRef(String type, String gameId) =>
       _db.ref().child('arcadeGames').child(type).child(gameId);
 
-  // ── Game over (FIXED: better error handling) ────────────────────────────
+  // ── Game over (idempotent: only the first caller awards coins) ───────────
 
   static Future<void> endGame(String type, String gameId, String? winnerUid, int entryFee) async {
     try {
-      // First mark game as finished
-      await _db.ref().child('arcadeGames').child(type).child(gameId).update({
-        'status': 'finished',
+      final gameRef = _db.ref().child('arcadeGames').child(type).child(gameId);
+
+      // Atomic claim: exactly one of the two players commits the finish.
+      // If status is already 'finished' or 'cancelled', the transaction aborts.
+      final tx = await gameRef.child('status').runTransaction((current) {
+        if (current == 'finished' || current == 'cancelled') return Transaction.abort();
+        return Transaction.success('finished');
+      });
+
+      if (!tx.committed) return; // Other player already called endGame — skip.
+
+      await gameRef.update({
         'winner': winnerUid ?? 'draw',
         'endedAt': DateTime.now().toUtc().toString(),
       });
 
-      // Then award coins to winner
       if (winnerUid != null && winnerUid.isNotEmpty && winnerUid != 'draw') {
         await Future.wait([
           _db.ref().child('users').child(winnerUid).child('coin').runTransaction(
-                  (v) => Transaction.success((v as int? ?? 0) + entryFee * 2)),
+              (v) => Transaction.success((v as int? ?? 0) + entryFee * 2)),
           _db.ref().child('users').child(winnerUid).child('score').runTransaction(
-                  (v) => Transaction.success((v as int? ?? 0) + 10)),
+              (v) => Transaction.success((v as int? ?? 0) + 10)),
           _db.ref().child('users').child(winnerUid).child('matchwon').runTransaction(
-                  (v) => Transaction.success((v as int? ?? 0) + 1)),
+              (v) => Transaction.success((v as int? ?? 0) + 1)),
         ]);
       }
     } catch (e) {
-      print('Error ending game: $e');
+      // Silently ignore — game state is written; coin award is best-effort.
     }
   }
 

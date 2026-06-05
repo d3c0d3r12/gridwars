@@ -5,7 +5,6 @@ import '../../functions/arcade_service.dart';
 import '../../helpers/color.dart';
 import '../../helpers/constant.dart';
 import '../../helpers/utils.dart';
-import '../../screens/splash.dart' show utils;
 import 'game_widgets.dart';
 import '../../screens/arcade_lobby.dart';
 
@@ -21,6 +20,7 @@ class _Connect4GameScreenState extends State<Connect4GameScreen> {
   List<int> _board = List.filled(42, 0);
   int _turn = 1;
   bool _gameOver = false;
+  bool _abandoned = false;
   StreamSubscription? _sub;
   StreamSubscription? _statusSub;
   int _myNum = 0;
@@ -38,12 +38,33 @@ class _Connect4GameScreenState extends State<Connect4GameScreen> {
       final board = List<int>.from((st['board'] as List).map((e) => int.parse(e.toString())));
       final turn  = int.parse(st['turn'].toString());
       setState(() { _board = board; _turn = turn; });
+
+      // Detect opponent win/draw on the loser's side so we show the correct
+      // result ("You Lose") instead of the generic "Opponent Left" fallback.
+      if (!_gameOver) {
+        final oppNum = _myNum == 1 ? 2 : 1;
+        outer:
+        for (int r = 5; r >= 0; r--) {
+          for (int c = 0; c < 7; c++) {
+            if (board[r * 7 + c] == oppNum && _checkWin(board, r, c, oppNum)) {
+              setState(() => _gameOver = true);
+              _showResult(false, false);
+              break outer;
+            }
+          }
+        }
+        if (!_gameOver && !board.contains(0)) {
+          setState(() => _gameOver = true);
+          _showResult(false, true);
+        }
+      }
     });
+    // _statusSub is a true-disconnect fallback only: fires when status='finished'
+    // but local win/draw detection above hasn't already set _gameOver.
     _statusSub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
         .child('status').onValue.listen((ev) {
       if (!mounted || _gameOver) return;
-      final status = ev.snapshot.value?.toString() ?? '';
-      if (status == 'finished') {
+      if (ev.snapshot.value?.toString() == 'finished') {
         setState(() => _gameOver = true);
         showOpponentLeftDialog(context);
       }
@@ -54,15 +75,27 @@ class _Connect4GameScreenState extends State<Connect4GameScreen> {
   void dispose() { _sub?.cancel(); _statusSub?.cancel(); super.dispose(); }
 
   void _abandonGame() async {
-    if (_gameOver) return;
+    if (_abandoned) return;
+    _abandoned = true;
     setState(() => _gameOver = true);
     _sub?.cancel();
     _statusSub?.cancel();
     await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
-    if (mounted) Navigator.pop(context);
+    if (mounted) {
+      Navigator.of(context).popUntil((route) => route is PageRoute);
+      Navigator.of(context).pop();
+    }
   }
 
-  void _handleExit() => showLeaveConfirmDialog(context, _abandonGame);
+  void _handleExit() {
+    if (!mounted) return;
+    if (_gameOver) {
+      Navigator.of(context).popUntil((route) => route is PageRoute);
+      Navigator.of(context).pop();
+      return;
+    }
+    showLeaveConfirmDialog(context, _abandonGame);
+  }
 
   bool get _myTurn => _turn == _myNum && !_gameOver;
 

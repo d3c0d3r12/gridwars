@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../functions/arcade_service.dart';
 import '../../helpers/color.dart';
 import '../../screens/arcade_lobby.dart';
-import '../../screens/splash.dart' show utils;
 import 'game_widgets.dart';
 
 class DotsBoxesGameScreen extends StatefulWidget {
@@ -20,10 +19,15 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
   int _turn = 1;
   int _p1Score = 0, _p2Score = 0;
   bool _gameOver = false;
+  bool _abandoned = false;
   bool _disposed = false;
   StreamSubscription? _sub;
   StreamSubscription? _statusSub;
   late int _myNum;
+
+  // Colors
+  static const _myColor  = Color(0xFF4B4EE6);  // indigo — me
+  static const _oppColor = Color(0xFFFB6B5B);  // coral  — opponent
 
   @override
   void initState() {
@@ -64,34 +68,42 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
   }
 
   void _abandonGame() async {
-    if (_gameOver || _disposed) return;
+    if (_abandoned || _disposed) return;
+    _abandoned = true;
     setState(() => _gameOver = true);
     _sub?.cancel();
     _statusSub?.cancel();
-    await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
-    if (mounted && !_disposed) Navigator.pop(context);
+    await ArcadeService.endGame(widget.args.type, widget.args.gameId,
+        widget.args.oppId, widget.args.entryFee);
+    if (mounted && !_disposed) {
+      Navigator.of(context).popUntil((route) => route is PageRoute);
+      Navigator.of(context).pop();
+    }
   }
 
-  void _handleExit() => showLeaveConfirmDialog(context, _abandonGame);
+  void _handleExit() {
+    if (!mounted) return;
+    if (_gameOver) {
+      Navigator.of(context).popUntil((route) => route is PageRoute);
+      Navigator.of(context).pop();
+      return;
+    }
+    showLeaveConfirmDialog(context, _abandonGame);
+  }
 
   bool get _myTurn => _turn == _myNum && !_gameOver;
 
-  // FIXED: Check each box only once and don't double count
   List<int> _getCompletedBoxes(List<int> h, List<int> v) {
     final completed = <int>[];
     for (int row = 0; row < 4; row++) {
       for (int col = 0; col < 4; col++) {
         final boxIdx = row * 4 + col;
         if (_boxes[boxIdx] != 0) continue;
-
         final top    = h[row * 4 + col] != 0;
         final bottom = h[(row + 1) * 4 + col] != 0;
         final left   = v[row * 5 + col] != 0;
         final right  = v[row * 5 + col + 1] != 0;
-
-        if (top && bottom && left && right) {
-          completed.add(boxIdx);
-        }
+        if (top && bottom && left && right) completed.add(boxIdx);
       }
     }
     return completed;
@@ -100,28 +112,21 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
   Future<void> _tapHLine(int row, int col) async {
     if (!_myTurn || _disposed) return;
     final idx = row * 4 + col;
-    if (_hLines[idx] != 0) return;
+    if (idx < 0 || idx >= _hLines.length || _hLines[idx] != 0) return;
 
-    final newH  = List<int>.from(_hLines);
-    final newV  = List<int>.from(_vLines);
-    final newB  = List<int>.from(_boxes);
+    final newH = List<int>.from(_hLines);
+    final newV = List<int>.from(_vLines);
+    final newB = List<int>.from(_boxes);
     newH[idx] = _myNum;
 
-    final completedBoxes = _getCompletedBoxes(newH, newV);
+    final completed = _getCompletedBoxes(newH, newV);
     int scored = 0;
-
-    for (final boxIdx in completedBoxes) {
-      if (newB[boxIdx] == 0) {
-        newB[boxIdx] = _myNum;
-        scored++;
-      }
+    for (final b in completed) {
+      if (newB[b] == 0) { newB[b] = _myNum; scored++; }
     }
 
-    int np1 = _p1Score;
-    int np2 = _p2Score;
-    if (widget.args.isP1) np1 += scored;
-    else np2 += scored;
-
+    int np1 = _p1Score, np2 = _p2Score;
+    if (widget.args.isP1) np1 += scored; else np2 += scored;
     final next = scored > 0 ? _myNum : (_turn == 1 ? 2 : 1);
 
     await ArcadeService.updateState(widget.args.type, widget.args.gameId,
@@ -131,28 +136,21 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
   Future<void> _tapVLine(int row, int col) async {
     if (!_myTurn || _disposed) return;
     final idx = row * 5 + col;
-    if (_vLines[idx] != 0) return;
+    if (idx < 0 || idx >= _vLines.length || _vLines[idx] != 0) return;
 
     final newH = List<int>.from(_hLines);
     final newV = List<int>.from(_vLines);
     final newB = List<int>.from(_boxes);
     newV[idx] = _myNum;
 
-    final completedBoxes = _getCompletedBoxes(newH, newV);
+    final completed = _getCompletedBoxes(newH, newV);
     int scored = 0;
-
-    for (final boxIdx in completedBoxes) {
-      if (newB[boxIdx] == 0) {
-        newB[boxIdx] = _myNum;
-        scored++;
-      }
+    for (final b in completed) {
+      if (newB[b] == 0) { newB[b] = _myNum; scored++; }
     }
 
-    int np1 = _p1Score;
-    int np2 = _p2Score;
-    if (widget.args.isP1) np1 += scored;
-    else np2 += scored;
-
+    int np1 = _p1Score, np2 = _p2Score;
+    if (widget.args.isP1) np1 += scored; else np2 += scored;
     final next = scored > 0 ? _myNum : (_turn == 1 ? 2 : 1);
 
     await ArcadeService.updateState(widget.args.type, widget.args.gameId,
@@ -165,15 +163,15 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
     String? winner;
     if (_p1Score > _p2Score) winner = await _getId(true);
     else if (_p2Score > _p1Score) winner = await _getId(false);
-    await ArcadeService.endGame(widget.args.type, widget.args.gameId, winner, widget.args.entryFee);
+    await ArcadeService.endGame(
+        widget.args.type, widget.args.gameId, winner, widget.args.entryFee);
     if (mounted && !_disposed) _showResult();
   }
 
   Future<String> _getId(bool p1) async {
     if (_disposed) return '';
     final s = await ArcadeService.stateRef(widget.args.type, widget.args.gameId).once();
-    final key = p1 ? 'p1' : 'p2';
-    return ((s.snapshot.value as Map)[key] as String?) ?? '';
+    return ((s.snapshot.value as Map)[p1 ? 'p1' : 'p2'] as String?) ?? '';
   }
 
   void _showResult() {
@@ -181,47 +179,207 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
     final oppScore = widget.args.isP1 ? _p2Score : _p1Score;
     final won = myScore > oppScore;
     final draw = myScore == oppScore;
-    showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
-      backgroundColor: surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
-      title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      content: Text('$myScore — $oppScore boxes', style: TextStyle(color: xColor, fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      actions: [TextButton(onPressed: () {
-        if (Navigator.canPop(context)) Navigator.pop(context);
-        if (Navigator.canPop(context)) Navigator.pop(context);
-      }, child: Text('Back', style: TextStyle(color: xColor)))],
-    ));
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Dialog(
+        backgroundColor: surfaceColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(draw ? '🤝' : won ? '🏆' : '😔', style: const TextStyle(fontSize: 52)),
+            const SizedBox(height: 8),
+            Text(
+              draw ? 'Match Draw' : won ? 'You Win!' : 'You Lose',
+              style: TextStyle(
+                color: draw ? ink2Color : won ? goodColor : red,
+                fontWeight: FontWeight.w800, fontSize: 24,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text('$myScore — $oppScore boxes',
+                style: TextStyle(color: xColor, fontWeight: FontWeight.w700, fontSize: 18)),
+            if (won) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(color: goldSoft, borderRadius: BorderRadius.circular(999)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.monetization_on_rounded, color: goldColor, size: 16),
+                  const SizedBox(width: 5),
+                  Text('+${widget.args.entryFee * 2} coins',
+                      style: TextStyle(color: const Color(0xFF9A6516), fontWeight: FontWeight.w700)),
+                ]),
+              ),
+            ],
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: xColor, foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 46),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
+              onPressed: () {
+                if (Navigator.canPop(context)) Navigator.pop(context);
+                if (Navigator.canPop(context)) Navigator.pop(context);
+              },
+              child: const Text('Back to Arcade', style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  void _handleTap(Offset pos, double boardWidth) {
+    // Must use the SAME geometry as the painter: pad=14, cellSz=(width-28)/4
+    const pad = 14.0;
+    final cellSz = (boardWidth - pad * 2) / 4.0;
+
+    double bestDist = double.infinity;
+    String? bestType;
+    int bestRow = 0, bestCol = 0;
+
+    // Horizontal lines (5 rows × 4 cols) — midpoint at (pad + (c+0.5)*cell, pad + r*cell)
+    for (int r = 0; r <= 4; r++) {
+      for (int c = 0; c < 4; c++) {
+        final mx = pad + (c + 0.5) * cellSz;
+        final my = pad + r * cellSz;
+        final d = (pos - Offset(mx, my)).distance;
+        if (d < bestDist) {
+          bestDist = d; bestType = 'h'; bestRow = r; bestCol = c;
+        }
+      }
+    }
+
+    // Vertical lines (4 rows × 5 cols) — midpoint at (pad + c*cell, pad + (r+0.5)*cell)
+    for (int r = 0; r < 4; r++) {
+      for (int c = 0; c <= 4; c++) {
+        final mx = pad + c * cellSz;
+        final my = pad + (r + 0.5) * cellSz;
+        final d = (pos - Offset(mx, my)).distance;
+        if (d < bestDist) {
+          bestDist = d; bestType = 'v'; bestRow = r; bestCol = c;
+        }
+      }
+    }
+
+    // Only register taps reasonably close to a line
+    if (bestDist > cellSz * 0.6) return;
+
+    if (bestType == 'h') {
+      _tapHLine(bestRow, bestCol);
+    } else if (bestType == 'v') {
+      _tapVLine(bestRow, bestCol);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final myScore  = widget.args.isP1 ? _p1Score : _p2Score;
     final oppScore = widget.args.isP1 ? _p2Score : _p1Score;
+    final total    = _boxes.length; // 16
 
     return PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) { if (!didPop && !_disposed) _handleExit(); },
-        child: Scaffold(
-          body: Container(
-            color: bgColor,
-            child: SafeArea(child: Column(children: [
-              gameHeader(context, 'DOTS & BOXES', _myTurn ? 'Your Turn' : "${widget.args.oppName}'s Turn", myScore, oppScore, onExit: _handleExit),
-              const SizedBox(height: 6),
-              if (_myTurn) gamePill('Tap a line to draw it — complete a box to score!', secondarySelectedColor),
-              if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName} is drawing…", inkColor.withValues(alpha: 0.5)),
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) { if (!didPop && !_disposed) _handleExit(); },
+      child: Scaffold(
+        backgroundColor: bgColor,
+        body: SafeArea(
+          child: Column(children: [
 
-              Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: AspectRatio(
-                      aspectRatio: 1,
+            // ── Header ──────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Row(children: [
+                GestureDetector(
+                  onTap: _handleExit,
+                  child: Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      color: surfaceColor, borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: lineColor),
+                    ),
+                    child: Icon(Icons.close_rounded, color: ink2Color, size: 18),
+                  ),
+                ),
+                const Spacer(),
+                Column(children: [
+                  Text('DOTS & BOXES',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                          color: inkColor, letterSpacing: 1.5)),
+                  const SizedBox(height: 2),
+                  Text(
+                    _myTurn ? 'Your Turn' : "${_shortName(widget.args.oppName)}'s Turn",
+                    style: TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600,
+                      color: _myTurn ? goodColor : red,
+                    ),
+                  ),
+                ]),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: surfaceColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: lineColor),
+                  ),
+                  child: Row(children: [
+                    Text('$myScore', style: TextStyle(
+                        color: myScore >= oppScore ? _myColor : ink3Color,
+                        fontWeight: FontWeight.w800, fontSize: 16)),
+                    Text(' — ', style: TextStyle(color: ink3Color, fontWeight: FontWeight.w600)),
+                    Text('$oppScore', style: TextStyle(
+                        color: oppScore > myScore ? _oppColor : ink3Color,
+                        fontWeight: FontWeight.w800, fontSize: 16)),
+                  ]),
+                ),
+              ]),
+            ),
+
+            const SizedBox(height: 10),
+
+            // ── Score cards ──────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(children: [
+                _PlayerScore('You', myScore, total, _myColor),
+                const SizedBox(width: 12),
+                _PlayerScore(_shortName(widget.args.oppName), oppScore, total, _oppColor),
+              ]),
+            ),
+
+            const SizedBox(height: 10),
+
+            // ── Board ────────────────────────────────────────────────────
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: surfaceColor,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: lineColor, width: 1.5),
+                      boxShadow: [shadow],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(19),
                       child: LayoutBuilder(builder: (_, c) {
-                        final sz  = c.maxWidth / 5.0;
                         return GestureDetector(
-                          onTapUp: (det) => _handleTap(det.localPosition, sz),
+                          behavior: HitTestBehavior.opaque,
+                          onTapUp: (det) => _handleTap(det.localPosition, c.maxWidth),
                           child: CustomPaint(
-                            painter: _DotsBoxesPainter(_hLines, _vLines, _boxes, sz, widget.args.isP1),
+                            painter: _DotsBoxesPainter(
+                              h: _hLines, v: _vLines, boxes: _boxes,
+                              isP1: widget.args.isP1,
+                              myColor: _myColor, oppColor: _oppColor,
+                              myTurn: _myTurn,
+                            ),
                             size: c.biggest,
                           ),
                         );
@@ -230,91 +388,258 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
                   ),
                 ),
               ),
+            ),
 
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+            // ── Hint strip ───────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                decoration: BoxDecoration(
+                  color: _myTurn ? _myColor.withValues(alpha: 0.08) : surface2Color,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _myTurn ? _myColor.withValues(alpha: 0.3) : lineColor,
+                  ),
+                ),
                 child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  _scoreChip('You', myScore, secondarySelectedColor),
-                  const SizedBox(width: 24),
-                  _scoreChip(widget.args.oppName, oppScore, const Color(0xFFE91E63)),
+                  Icon(
+                    _myTurn ? Icons.touch_app_rounded : Icons.hourglass_top_rounded,
+                    size: 15,
+                    color: _myTurn ? _myColor : ink3Color,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _myTurn
+                        ? 'Tap near a line to draw it'
+                        : 'Waiting for ${_shortName(widget.args.oppName)}…',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: _myTurn ? _myColor : ink2Color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ]),
               ),
-            ])),
-          ),
-        ));
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 
-  void _handleTap(Offset pos, double sz) {
-    final col = (pos.dx / sz).floor().clamp(0, 4);
-    final row = (pos.dy / sz).floor().clamp(0, 4);
-    final fx  = (pos.dx % sz) / sz;
-    final fy  = (pos.dy % sz) / sz;
-
-    if (fy < 0.25 && row < 5 && col < 4) {
-      _tapHLine(row, col);
-    } else if (fy > 0.75 && row < 4 && col < 4) {
-      _tapHLine(row + 1, col);
-    } else if (fx < 0.25 && row < 4 && col < 5) {
-      _tapVLine(row, col);
-    } else if (fx > 0.75 && row < 4 && col < 4) {
-      _tapVLine(row, col + 1);
-    }
+  static String _shortName(String name) {
+    if (name.length <= 12) return name;
+    return '${name.substring(0, 10)}…';
   }
-
-  Widget _scoreChip(String name, int score, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-    decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: color.withValues(alpha: 0.15), border: Border.all(color: color.withValues(alpha: 0.4))),
-    child: Text('$name: $score', style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-  );
 }
+
+// ── Player score card ──────────────────────────────────────────────────────────
+
+class _PlayerScore extends StatelessWidget {
+  final String name;
+  final int score;
+  final int total;
+  final Color color;
+  const _PlayerScore(this.name, this.score, this.total, this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = total == 0 ? 0.0 : score / total;
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: color)),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(name,
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            Text('$score', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
+          ]),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: pct,
+              backgroundColor: color.withValues(alpha: 0.15),
+              valueColor: AlwaysStoppedAnimation(color),
+              minHeight: 4,
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Custom Painter ─────────────────────────────────────────────────────────────
 
 class _DotsBoxesPainter extends CustomPainter {
   final List<int> h, v, boxes;
-  final double sz;
   final bool isP1;
-  _DotsBoxesPainter(this.h, this.v, this.boxes, this.sz, this.isP1);
+  final Color myColor, oppColor;
+  final bool myTurn;
 
-  static const myColor  = Color(0xFF2196F3);
-  static const oppColor = Color(0xFFE91E63);
+  _DotsBoxesPainter({
+    required this.h, required this.v, required this.boxes,
+    required this.isP1,
+    required this.myColor, required this.oppColor,
+    required this.myTurn,
+  });
+
+  Color _ownerColor(int owner) =>
+      owner == 0 ? Colors.transparent
+      : (isP1 ? owner == 1 : owner == 2) ? myColor : oppColor;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final dot   = Paint()..color = Colors.white..style = PaintingStyle.fill;
+    // Padding inside the white card
+    const pad = 14.0;
+    final cellSz = (size.width - pad * 2) / 4.0;
 
+    // ── 1. Box fills ────────────────────────────────────────────────────
     for (int r = 0; r < 4; r++) {
       for (int c = 0; c < 4; c++) {
         final owner = boxes[r * 4 + c];
         if (owner == 0) continue;
-        final color = (isP1 ? owner == 1 : owner == 2) ? myColor : oppColor;
-        canvas.drawRect(Rect.fromLTWH(c * sz + 4, r * sz + 4, sz - 8, sz - 8),
-            Paint()..color = color.withValues(alpha: 0.25));
+        final col = _ownerColor(owner);
+        final rect = Rect.fromLTWH(
+          pad + c * cellSz + 3, pad + r * cellSz + 3,
+          cellSz - 6, cellSz - 6,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(rect, const Radius.circular(6)),
+          Paint()..color = col.withValues(alpha: 0.22),
+        );
+        // Owner initial letter
+        final tp = TextPainter(
+          text: TextSpan(
+            text: isP1 ? (owner == 1 ? 'Y' : 'O') : (owner == 2 ? 'Y' : 'O'),
+            style: TextStyle(
+              color: col.withValues(alpha: 0.55),
+              fontSize: cellSz * 0.35,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, Offset(
+          pad + c * cellSz + (cellSz - tp.width) / 2,
+          pad + r * cellSz + (cellSz - tp.height) / 2,
+        ));
       }
     }
 
+    // ── 2. Empty box hint grid (very subtle) ────────────────────────────
+    for (int r = 0; r < 4; r++) {
+      for (int c = 0; c < 4; c++) {
+        if (boxes[r * 4 + c] != 0) continue;
+        final rect = Rect.fromLTWH(
+          pad + c * cellSz, pad + r * cellSz,
+          cellSz, cellSz,
+        );
+        canvas.drawRect(rect,
+          Paint()
+            ..color = const Color(0xFFE7E9EF).withValues(alpha: 0.6)
+            ..style = PaintingStyle.fill,
+        );
+      }
+    }
+
+    // ── 3. Horizontal lines ─────────────────────────────────────────────
     for (int r = 0; r <= 4; r++) {
       for (int c = 0; c < 4; c++) {
-        final owner = r < 5 ? (r * 4 + c < h.length ? h[r * 4 + c] : 0) : 0;
-        final color = owner == 0 ? Colors.white24 : (isP1 ? owner == 1 : owner == 2) ? myColor : oppColor;
-        canvas.drawLine(Offset(c * sz + 8, r * sz),
-            Offset((c + 1) * sz - 8, r * sz),
-            Paint()..color = color..strokeWidth = owner != 0 ? 4 : 2..strokeCap = StrokeCap.round);
+        final owner = h[r * 4 + c];
+        final drawn = owner != 0;
+        final col = drawn ? _ownerColor(owner) : const Color(0xFFCDD0DA);
+        final x1 = pad + c * cellSz + (drawn ? 4.0 : 8.0);
+        final x2 = pad + (c + 1) * cellSz - (drawn ? 4.0 : 8.0);
+        final y  = pad + r * cellSz;
+
+        canvas.drawLine(
+          Offset(x1, y), Offset(x2, y),
+          Paint()
+            ..color = col
+            ..strokeWidth = drawn ? 5 : 2.5
+            ..strokeCap = StrokeCap.round,
+        );
+
+        // Glow for drawn lines
+        if (drawn) {
+          canvas.drawLine(
+            Offset(x1, y), Offset(x2, y),
+            Paint()
+              ..color = col.withValues(alpha: 0.25)
+              ..strokeWidth = 10
+              ..strokeCap = StrokeCap.round
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+          );
+        }
       }
     }
 
+    // ── 4. Vertical lines ───────────────────────────────────────────────
     for (int r = 0; r < 4; r++) {
       for (int c = 0; c <= 4; c++) {
-        final owner = r * 5 + c < v.length ? v[r * 5 + c] : 0;
-        final color = owner == 0 ? Colors.white24 : (isP1 ? owner == 1 : owner == 2) ? myColor : oppColor;
-        canvas.drawLine(Offset(c * sz, r * sz + 8),
-            Offset(c * sz, (r + 1) * sz - 8),
-            Paint()..color = color..strokeWidth = owner != 0 ? 4 : 2..strokeCap = StrokeCap.round);
+        final owner = v[r * 5 + c];
+        final drawn = owner != 0;
+        final col = drawn ? _ownerColor(owner) : const Color(0xFFCDD0DA);
+        final x  = pad + c * cellSz;
+        final y1 = pad + r * cellSz + (drawn ? 4.0 : 8.0);
+        final y2 = pad + (r + 1) * cellSz - (drawn ? 4.0 : 8.0);
+
+        canvas.drawLine(
+          Offset(x, y1), Offset(x, y2),
+          Paint()
+            ..color = col
+            ..strokeWidth = drawn ? 5 : 2.5
+            ..strokeCap = StrokeCap.round,
+        );
+
+        if (drawn) {
+          canvas.drawLine(
+            Offset(x, y1), Offset(x, y2),
+            Paint()
+              ..color = col.withValues(alpha: 0.25)
+              ..strokeWidth = 10
+              ..strokeCap = StrokeCap.round
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+          );
+        }
       }
     }
 
+    // ── 5. Dots ─────────────────────────────────────────────────────────
     for (int r = 0; r <= 4; r++) {
       for (int c = 0; c <= 4; c++) {
-        canvas.drawCircle(Offset(c * sz.toDouble(), r * sz.toDouble()), 5, dot);
+        final cx = pad + c * cellSz;
+        final cy = pad + r * cellSz;
+        // Shadow
+        canvas.drawCircle(Offset(cx, cy), 7,
+          Paint()..color = const Color(0x22000000)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));
+        // Dot
+        canvas.drawCircle(Offset(cx, cy), 6,
+          Paint()..color = const Color(0xFF1A2B3C));
+        // Highlight
+        canvas.drawCircle(Offset(cx - 1.5, cy - 1.5), 2,
+          Paint()..color = Colors.white.withValues(alpha: 0.5));
       }
+    }
+
+    // ── 6. "My turn" glow on tappable lines ────────────────────────────
+    if (myTurn) {
+      // Subtle pulse effect — draw semi-transparent rects near undrawn lines
+      // to hint they are interactive (done via the light gray color above)
     }
   }
 

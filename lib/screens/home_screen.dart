@@ -16,6 +16,8 @@ import '../functions/dialoges.dart';
 import '../functions/getCoin.dart';
 import '../models/sound_effect.dart';
 import '../widgets/xo_logo.dart';
+import '../functions/admin_service.dart';
+import 'admin_panel.dart';
 import 'arcade.dart';
 import 'daily_challenge.dart';
 import 'finding_player.dart';
@@ -49,10 +51,13 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
   TextEditingController player2controller = TextEditingController();
   String? getlanguage;
   StreamSubscription? _coinSub;
+  StreamSubscription? _banSub;
+  bool _isAdmin = false;
 
   @override
   void initState() {
     super.initState();
+    _checkAdminAndBan();
     _entryCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 600));
     _entryOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -68,10 +73,42 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
     deleteOldGames();
   }
 
+  Future<void> _checkAdminAndBan() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    // Check admin status
+    final admin = await AdminService.isAdmin(uid);
+    if (mounted) setState(() => _isAdmin = admin);
+
+    // Real-time ban listener — kicks user instantly if banned while in app
+    _banSub = AdminService.bannedStream(uid).listen((banned) {
+      if (!mounted || !banned) return;
+      FirebaseAuth.instance.signOut();
+      Navigator.of(context).pushNamedAndRemoveUntil(
+          '/authscreen', (_) => false);
+      // Show ban reason
+      FirebaseDatabase.instance
+          .ref()
+          .child('users')
+          .child(uid)
+          .child('banReason')
+          .once()
+          .then((s) {
+        final reason = s.snapshot.value?.toString() ?? '';
+        if (context.mounted) {
+          Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => BannedScreen(reason: reason)));
+        }
+      });
+    });
+  }
+
   @override
   void dispose() {
     _entryCtrl.dispose();
     _coinSub?.cancel();
+    _banSub?.cancel();
     super.dispose();
   }
 
@@ -247,6 +284,26 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
               ],
             ),
             const Spacer(),
+            // Admin button — only visible to admins
+            if (_isAdmin) ...[
+              GestureDetector(
+                onTap: () => Navigator.push(context,
+                    CupertinoPageRoute(
+                        builder: (_) => const AdminPanelScreen())),
+                child: Container(
+                  width: 38, height: 38,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE53935).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: const Color(0xFFE53935).withValues(alpha: 0.4)),
+                  ),
+                  child: const Icon(Icons.admin_panel_settings_rounded,
+                      color: Color(0xFFE53935), size: 18),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
             // Coin chip
             _CoinChip(coin: coin),
             const SizedBox(width: 10),
@@ -313,7 +370,9 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
                 Row(
                   children: [
                     _Avatar(
-                        label: (user?.displayName ?? 'Y')[0].toUpperCase()),
+                        label: ((user?.displayName ?? '').isNotEmpty
+                            ? user!.displayName![0]
+                            : 'Y').toUpperCase()),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -998,8 +1057,8 @@ class _SectionLabel extends StatelessWidget {
 
 class _Avatar extends StatelessWidget {
   final String label;
-  final double size;
-  const _Avatar({required this.label, this.size = 46});
+  static const double size = 46;
+  const _Avatar({required this.label});
 
   @override
   Widget build(BuildContext context) {

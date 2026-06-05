@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import '../functions/arcade_service.dart';
 import '../helpers/color.dart';
 import '../helpers/constant.dart';
-import '../screens/splash.dart';
 import 'games/battleship_game.dart';
 import 'games/checkers_game.dart';
 import 'games/connect4_game.dart';
@@ -30,9 +29,12 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
   String _status = 'Finding opponent…';
   String _gameId = '';
   bool _searching = true;
+  bool _foundOpp = false; // shows brief "Found!" state before navigating
+  String _oppName = '';
   StreamSubscription? _sub;
   StreamSubscription? _lobbySub;
   Timer? _timeout;
+  Timer? _navDelay;
   bool _navigated = false;
   bool _disposed = false;
   final _uid = FirebaseAuth.instance.currentUser!.uid;
@@ -49,6 +51,7 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
     _sub?.cancel();
     _lobbySub?.cancel();
     _timeout?.cancel();
+    _navDelay?.cancel();
     super.dispose();
   }
 
@@ -57,7 +60,10 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
     _navigated = false;
     final result = await ArcadeService.findOrCreate(widget.gameType, entryFee: fixedEntryFee);
     if (_disposed || !mounted) return;
-    final gameId = result['gameId'] as String;
+
+    // 'waiting' means we already had a game in the lobby — re-use its gameId.
+    final gameId = result['gameId'] as String? ?? '';
+    if (gameId.isEmpty) return;
     setState(() => _gameId = gameId);
 
     if (result['status'] == 'joined') {
@@ -65,13 +71,16 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
       final info  = await ArcadeService.userInfo(oppId);
       if (mounted && !_navigated && !_disposed) {
         _navigated = true;
-        _navigate(gameId, isP1: false, oppId: oppId, oppName: info['username']!);
+        _flashAndNavigate(gameId, isP1: false, oppId: oppId, oppName: info['username'] ?? 'Opponent');
       }
       return;
     }
 
     _timeout = Timer(const Duration(seconds: 60), () {
       if (_disposed || !mounted) return;
+      // Cancel subs so no late-arriving 'active' events sneak through.
+      _sub?.cancel();
+      _lobbySub?.cancel();
       ArcadeService.cancelGame(widget.gameType, gameId);
       setState(() { _searching = false; _status = 'No opponent found.\nTap to try again.'; });
     });
@@ -105,7 +114,7 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
         return;
       }
       final info  = await ArcadeService.userInfo(oppId);
-      if (mounted && !_disposed) _navigate(gameId, isP1: true, oppId: oppId, oppName: info['username']!);
+      if (mounted && !_disposed) _flashAndNavigate(gameId, isP1: true, oppId: oppId, oppName: info['username'] ?? 'Opponent');
     });
 
     _lobbySub = FirebaseDatabase.instance
@@ -127,7 +136,20 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
       _lobbySub?.cancel();
       ArcadeService.cancelGame(widget.gameType, gameId);
       final info = await ArcadeService.userInfo(hostUid);
-      if (mounted && !_disposed) _navigate(otherKey, isP1: false, oppId: hostUid, oppName: info['username']!);
+      if (mounted && !_disposed) _flashAndNavigate(otherKey, isP1: false, oppId: hostUid, oppName: info['username'] ?? 'Opponent');
+    });
+  }
+
+  void _flashAndNavigate(String gameId, {required bool isP1, required String oppId, required String oppName}) {
+    if (_disposed || !mounted) return;
+    setState(() {
+      _foundOpp = true;
+      _oppName = oppName;
+      _searching = false;
+      _status = 'Opponent found!';
+    });
+    _navDelay = Timer(const Duration(milliseconds: 1200), () {
+      if (!_disposed && mounted) _navigate(gameId, isP1: isP1, oppId: oppId, oppName: oppName);
     });
   }
 
@@ -152,7 +174,15 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
     _sub?.cancel();
     _lobbySub?.cancel();
     _timeout?.cancel();
-    setState(() { _searching = true; _status = 'Finding opponent…'; _gameId = ''; });
+    _navDelay?.cancel();
+    setState(() {
+      _searching = true;
+      _foundOpp = false;
+      _oppName = '';
+      _status = 'Finding opponent…';
+      _gameId = '';
+      _navigated = false;
+    });
     _find();
   }
 
@@ -193,23 +223,53 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
           ),
 
           Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Container(
-              width: 110,
-              height: 110,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: widget.accent.withValues(alpha: 0.10),
-                border: Border.all(color: widget.accent.withValues(alpha: 0.35), width: 2),
-                boxShadow: [BoxShadow(color: widget.accent.withValues(alpha: 0.18), blurRadius: 30, spreadRadius: 5)],
+            // Icon / spinner
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: Container(
+                key: ValueKey(_foundOpp),
+                width: 110, height: 110,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _foundOpp
+                      ? const Color(0xFF43A047).withValues(alpha: 0.12)
+                      : widget.accent.withValues(alpha: 0.10),
+                  border: Border.all(
+                    color: _foundOpp
+                        ? const Color(0xFF43A047).withValues(alpha: 0.5)
+                        : widget.accent.withValues(alpha: 0.35),
+                    width: 2,
+                  ),
+                  boxShadow: [BoxShadow(
+                    color: (_foundOpp ? const Color(0xFF43A047) : widget.accent).withValues(alpha: 0.20),
+                    blurRadius: 30, spreadRadius: 5,
+                  )],
+                ),
+                child: Center(child: _searching
+                    ? CircularProgressIndicator(color: widget.accent, strokeWidth: 3)
+                    : Icon(
+                        _foundOpp ? Icons.check_circle_rounded : Icons.person_search_rounded,
+                        color: _foundOpp ? const Color(0xFF43A047) : widget.accent,
+                        size: 48,
+                      )),
               ),
-              child: Center(child: _searching
-                  ? CircularProgressIndicator(color: widget.accent, strokeWidth: 3)
-                  : Icon(Icons.person_search_rounded, color: widget.accent, size: 48)),
             ),
 
             const SizedBox(height: 28),
 
-            Text(_status, style: TextStyle(color: inkColor, fontSize: 15, fontWeight: FontWeight.w600), textAlign: TextAlign.center),
+            Text(_status,
+                style: TextStyle(
+                  color: _foundOpp ? const Color(0xFF2E7D32) : inkColor,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+                textAlign: TextAlign.center),
+
+            if (_foundOpp && _oppName.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text('vs $_oppName', style: TextStyle(color: ink2Color, fontSize: 13, fontWeight: FontWeight.w500)),
+            ],
+
             const SizedBox(height: 8),
             if (_searching)
               Container(
@@ -229,7 +289,7 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
 
             const SizedBox(height: 32),
 
-            if (!_searching)
+            if (!_searching && !_foundOpp)
               GestureDetector(
                 onTap: _retry,
                 child: Container(

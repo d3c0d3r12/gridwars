@@ -1,9 +1,9 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../functions/arcade_service.dart';
 import '../../helpers/color.dart';
 import '../../screens/arcade_lobby.dart';
-import '../../screens/splash.dart';
 import 'game_widgets.dart';
 
 class RpsGameScreen extends StatefulWidget {
@@ -13,15 +13,28 @@ class RpsGameScreen extends StatefulWidget {
   State<RpsGameScreen> createState() => _RpsGameScreenState();
 }
 
-class _RpsGameScreenState extends State<RpsGameScreen> {
+class _RpsGameScreenState extends State<RpsGameScreen>
+    with TickerProviderStateMixin {
   Map _state = {};
   String _myChoice = '';
   bool _gameOver = false;
   bool _resultShown = false;
   bool _disposed = false;
   String _resultMsg = '';
+  bool _roundWon = false; // true=won, false=lost, null=draw
   StreamSubscription? _sub;
   bool _abandoned = false;
+
+  // Timer
+  static const _timerMax = 10;
+  int _timerSecs = _timerMax;
+  Timer? _countdownTimer;
+
+  // Animation
+  late AnimationController _pulseCtrl;
+  late Animation<double> _pulseAnim;
+  late AnimationController _resultCtrl;
+  late Animation<double> _resultAnim;
 
   String get _p1Key => 'p1Choice';
   String get _p2Key => 'p2Choice';
@@ -30,11 +43,26 @@ class _RpsGameScreenState extends State<RpsGameScreen> {
 
   static const _choices = ['rock', 'paper', 'scissors'];
   static const _emoji = {'rock': '✊', 'paper': '✋', 'scissors': '✌️'};
+  static const _labels = {'rock': 'Rock', 'paper': 'Paper', 'scissors': 'Scissors'};
   static const _beats = {'rock': 'scissors', 'paper': 'rock', 'scissors': 'paper'};
+  static const _btnColors = {
+    'rock': Color(0xFFE53935),
+    'paper': Color(0xFF1E88E5),
+    'scissors': Color(0xFF43A047),
+  };
 
   @override
   void initState() {
     super.initState();
+
+    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
+      ..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 1.0, end: 1.12)
+        .animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
+
+    _resultCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
+    _resultAnim = CurvedAnimation(parent: _resultCtrl, curve: Curves.elasticOut);
+
     _sub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
         .onValue
         .listen((ev) {
@@ -42,6 +70,7 @@ class _RpsGameScreenState extends State<RpsGameScreen> {
       final data = Map<String, dynamic>.from(ev.snapshot.value as Map);
       if (data['status'] == 'finished' || data['status'] == 'cancelled') {
         if (!_gameOver && !_abandoned && mounted && !_disposed) {
+          _stopTimer();
           setState(() => _gameOver = true);
           if (!_resultShown) {
             _resultShown = true;
@@ -51,88 +80,169 @@ class _RpsGameScreenState extends State<RpsGameScreen> {
         return;
       }
       final st = Map<String, dynamic>.from(data['state'] as Map);
-      setState(() => _state = st);
+      final myChoiceInState = st[_myKey] as String? ?? '';
+      setState(() {
+        _state = st;
+        // Sync local choice if state cleared it (new round)
+        if (myChoiceInState.isEmpty) _myChoice = '';
+      });
       _checkRound(st);
     });
+
+    // Start timer after first build
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startTimer());
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _stopTimer();
+    _pulseCtrl.dispose();
+    _resultCtrl.dispose();
     _sub?.cancel();
     super.dispose();
   }
 
-  void _abandonGame() async {
-    if (_gameOver || _abandoned || _disposed) return;
-    _abandoned = true;
-    setState(() => _gameOver = true);
-    _sub?.cancel();
-    await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
-    if (mounted && !_disposed) Navigator.pop(context);
+  // ── Timer ────────────────────────────────────────────────────────────────
+
+  void _startTimer() {
+    if (_disposed || _gameOver) return;
+    _stopTimer();
+    setState(() {
+      _timerSecs = _timerMax;
+    });
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted || _disposed) { t.cancel(); return; }
+      if (_timerSecs <= 1) {
+        t.cancel();
+        setState(() { _timerSecs = 0; });
+        // Auto-pick random if user hasn't picked
+        if (_myChoice.isEmpty && !_gameOver) {
+          _pick(_choices[Random().nextInt(_choices.length)]);
+        }
+      } else {
+        setState(() => _timerSecs--);
+      }
+    });
   }
 
-  void _handleExit() => showLeaveConfirmDialog(context, _abandonGame);
+  void _stopTimer() {
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
+    if (mounted) setState(() {});
+  }
+
+  // ── Game logic ───────────────────────────────────────────────────────────
+
+  void _abandonGame() async {
+    if (_abandoned || _disposed) return;
+    _abandoned = true;
+    _stopTimer();
+    setState(() => _gameOver = true);
+    _sub?.cancel();
+    await ArcadeService.endGame(widget.args.type, widget.args.gameId,
+        widget.args.oppId, widget.args.entryFee);
+    if (mounted && !_disposed) {
+      Navigator.of(context).popUntil((route) => route is PageRoute);
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _handleExit() {
+    if (!mounted) return;
+    if (_gameOver) {
+      // Game already ended — skip confirm, close any result dialog + game screen.
+      Navigator.of(context).popUntil((route) => route is PageRoute);
+      Navigator.of(context).pop();
+      return;
+    }
+    showLeaveConfirmDialog(context, _abandonGame);
+  }
 
   void _pick(String choice) async {
     if (_myChoice.isNotEmpty || _gameOver || _disposed) return;
+    _stopTimer();
     setState(() => _myChoice = choice);
-    await ArcadeService.updateState(widget.args.type, widget.args.gameId, {_myKey: choice});
+    await ArcadeService.updateState(
+        widget.args.type, widget.args.gameId, {_myKey: choice});
   }
 
-  // FIXED: Better round resolution with proper end game handling
   void _checkRound(Map st) async {
     final p1 = st[_p1Key] as String? ?? '';
     final p2 = st[_p2Key] as String? ?? '';
-    if (p1.isEmpty || p2.isEmpty) return;
+    if (p1.isEmpty || p2.isEmpty) {
+      // New round started — restart timer only if I haven't picked
+      if (_myChoice.isEmpty && !_gameOver && !_disposed) {
+        _startTimer();
+      }
+      return;
+    }
 
     if (_disposed) return;
+    _stopTimer();
 
     int p1Score = (st['p1Score'] as int? ?? 0);
     int p2Score = (st['p2Score'] as int? ?? 0);
-    final round  = st['round'] as int? ?? 1;
-    final maxR   = st['maxRounds'] as int? ?? 5;
+    final round = st['round'] as int? ?? 1;
+    final maxR  = st['maxRounds'] as int? ?? 5;
 
+    bool iWon;
     String roundResult;
     if (p1 == p2) {
-      roundResult = 'Draw!';
+      iWon = false;
+      roundResult = 'Draw — No points!';
     } else if (_beats[p1] == p2) {
       p1Score++;
-      roundResult = widget.args.isP1 ? 'You win this round! 🎉' : 'Opponent wins round';
+      iWon = widget.args.isP1;
+      roundResult = widget.args.isP1 ? 'Round Win! 🎉' : 'Round Lost!';
     } else {
       p2Score++;
-      roundResult = widget.args.isP1 ? 'Opponent wins round' : 'You win this round! 🎉';
+      iWon = !widget.args.isP1;
+      roundResult = widget.args.isP1 ? 'Round Lost!' : 'Round Win! 🎉';
     }
 
-    setState(() { _resultMsg = roundResult; });
+    setState(() {
+      _resultMsg = roundResult;
+      _roundWon = iWon;
+    });
+    _resultCtrl.forward(from: 0);
 
-    // Clear choices after showing result
-    await Future.delayed(const Duration(milliseconds: 800));
-
+    await Future.delayed(const Duration(milliseconds: 1200));
     if (_disposed) return;
 
-    // Check if game is over
-    final gameOver = (round >= maxR) || (p1Score > maxR ~/ 2) || (p2Score > maxR ~/ 2);
+    final gameOver =
+        (round >= maxR) || (p1Score > maxR ~/ 2) || (p2Score > maxR ~/ 2);
 
     if (gameOver) {
       String? winner;
       if (p1Score > p2Score) winner = await _getP1Id();
       else if (p2Score > p1Score) winner = await _getP2Id();
 
-      setState(() { _gameOver = true; });
+      setState(() { _gameOver = true; _resultMsg = ''; });
 
-      await ArcadeService.updateState(widget.args.type, widget.args.gameId,
-          {'p1Score': p1Score, 'p2Score': p2Score, 'round': round + 1, 'p1Choice': '', 'p2Choice': ''});
-      await ArcadeService.endGame(widget.args.type, widget.args.gameId, winner, widget.args.entryFee);
+      await ArcadeService.updateState(widget.args.type, widget.args.gameId, {
+        'p1Score': p1Score,
+        'p2Score': p2Score,
+        'round': round + 1,
+        'p1Choice': '',
+        'p2Choice': '',
+      });
+      await ArcadeService.endGame(
+          widget.args.type, widget.args.gameId, winner, widget.args.entryFee);
 
       if (mounted && !_disposed && !_resultShown) {
         _resultShown = true;
-        _showResult(p1Score, p2Score);
+        _showFinalResult(p1Score, p2Score);
       }
     } else {
-      setState(() { _myChoice = ''; });
-      await ArcadeService.updateState(widget.args.type, widget.args.gameId,
-          {'p1Score': p1Score, 'p2Score': p2Score, 'round': round + 1, 'p1Choice': '', 'p2Choice': ''});
+      setState(() { _myChoice = ''; _resultMsg = ''; });
+      await ArcadeService.updateState(widget.args.type, widget.args.gameId, {
+        'p1Score': p1Score,
+        'p2Score': p2Score,
+        'round': round + 1,
+        'p1Choice': '',
+        'p2Choice': '',
+      });
     }
   }
 
@@ -148,147 +258,456 @@ class _RpsGameScreenState extends State<RpsGameScreen> {
     return ((s.snapshot.value as Map)['p2'] as String?) ?? '';
   }
 
-  void _showResult(int p1Score, int p2Score) {
+  void _showFinalResult(int p1Score, int p2Score) {
     final myScore  = widget.args.isP1 ? p1Score : p2Score;
     final oppScore = widget.args.isP1 ? p2Score : p1Score;
-    final won = myScore > oppScore;
+    final won  = myScore > oppScore;
     final draw = myScore == oppScore;
 
-    showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
-      backgroundColor: surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
-      title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      content: Text('$myScore — $oppScore', style: TextStyle(color: xColor, fontSize: 32, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      actions: [TextButton(onPressed: () {
-        if (Navigator.canPop(context)) Navigator.pop(context);
-        if (Navigator.canPop(context)) Navigator.pop(context);
-      }, child: Text('Back', style: TextStyle(color: xColor)))],
-    ));
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Dialog(
+        backgroundColor: surfaceColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(
+              draw ? '🤝' : won ? '🏆' : '😔',
+              style: const TextStyle(fontSize: 52),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              draw ? 'Match Draw' : won ? 'You Win!' : 'You Lose',
+              style: TextStyle(
+                color: draw ? ink2Color : won ? goodColor : red,
+                fontWeight: FontWeight.w800, fontSize: 26,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                color: surface2Color,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: lineColor),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                _scoreCol('YOU', myScore, xColor),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Text(':', style: TextStyle(fontSize: 28, color: ink3Color, fontWeight: FontWeight.w700)),
+                ),
+                _scoreCol(widget.args.oppName, oppScore, oColor),
+              ]),
+            ),
+            if (won) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: goldSoft,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.monetization_on_rounded, color: goldColor, size: 18),
+                  const SizedBox(width: 6),
+                  Text('+${widget.args.entryFee * 2} coins',
+                      style: TextStyle(color: const Color(0xFF9A6516), fontWeight: FontWeight.w700, fontSize: 15)),
+                ]),
+              ),
+            ],
+            const SizedBox(height: 22),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: xColor,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
+              onPressed: () {
+                if (Navigator.canPop(context)) Navigator.pop(context);
+                if (Navigator.canPop(context)) Navigator.pop(context);
+              },
+              child: const Text('Back to Arcade', style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
+
+  Widget _scoreCol(String label, int score, Color col) {
+    return Column(children: [
+      Text(
+        '$score',
+        style: TextStyle(fontSize: 36, fontWeight: FontWeight.w800, color: col),
+      ),
+      Text(label, style: TextStyle(fontSize: 11, color: ink3Color, fontWeight: FontWeight.w600),
+          maxLines: 1, overflow: TextOverflow.ellipsis),
+    ]);
+  }
+
+  // ── Build ────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final round  = _state['round'] as int? ?? 1;
-    final maxR   = _state['maxRounds'] as int? ?? 5;
-    final myScore  = widget.args.isP1 ? (_state['p1Score'] ?? 0) : (_state['p2Score'] ?? 0);
-    final oppScore = widget.args.isP1 ? (_state['p2Score'] ?? 0) : (_state['p1Score'] ?? 0);
+    final round    = (_state['round'] as int? ?? 1).clamp(1, 999);
+    final maxR     = _state['maxRounds'] as int? ?? 5;
+    final myScore  = (widget.args.isP1 ? _state['p1Score'] : _state['p2Score']) as int? ?? 0;
+    final oppScore = (widget.args.isP1 ? _state['p2Score'] : _state['p1Score']) as int? ?? 0;
     final oppPicked = (_state[_oppKey] as String? ?? '').isNotEmpty;
+    final timerFrac = _timerSecs / _timerMax;
+    final timerDanger = _timerSecs <= 3;
 
     return PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) { if (!didPop && !_disposed) _handleExit(); },
-        child: Scaffold(
-          body: Container(
-            color: bgColor,
-            child: SafeArea(child: Column(children: [
-              _header(context, 'ROCK PAPER SCISSORS', 'Round $round / $maxR', myScore, oppScore, onExit: _handleExit),
-              const SizedBox(height: 12),
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !_disposed) _handleExit();
+      },
+      child: Scaffold(
+        backgroundColor: bgColor,
+        body: SafeArea(
+          child: Column(children: [
 
-              if (_resultMsg.isNotEmpty)
-                _pill(_resultMsg, secondarySelectedColor),
-              if (_myChoice.isNotEmpty && !oppPicked && !_gameOver)
-                _pill('Waiting for ${widget.args.oppName}…', inkColor.withValues(alpha: 0.6)),
-              if (_myChoice.isEmpty && !_gameOver)
-                _pill('Pick your move!', inkColor.withValues(alpha: 0.7)),
-
-              const SizedBox(height: 20),
-
-              Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                _choiceCircle(
-                  label: 'You',
-                  emoji: _myChoice.isNotEmpty ? _emoji[_myChoice]! : '?',
-                  color: xColor,
-                  picked: _myChoice.isNotEmpty,
+            // ── Top bar ───────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Row(children: [
+                // Exit button
+                GestureDetector(
+                  onTap: _handleExit,
+                  child: Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      color: surfaceColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: lineColor),
+                    ),
+                    child: Icon(Icons.close_rounded, color: ink2Color, size: 18),
+                  ),
                 ),
-                Text('VS', style: TextStyle(color: inkColor.withValues(alpha: 0.4), fontWeight: FontWeight.bold, fontSize: 18)),
-                _choiceCircle(
-                  label: widget.args.oppName,
-                  emoji: oppPicked && _myChoice.isNotEmpty ? _emoji[_state[_oppKey]]! : '?',
-                  color: const Color(0xFFE91E63),
-                  picked: oppPicked,
+
+                const Spacer(),
+
+                // Title + round
+                Column(children: [
+                  Text('ROCK PAPER SCISSORS',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                          color: inkColor, letterSpacing: 1.5)),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: xSoft, borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text('Round $round of $maxR',
+                        style: TextStyle(fontSize: 11, color: xColor, fontWeight: FontWeight.w700)),
+                  ),
+                ]),
+
+                const Spacer(),
+
+                // Scores
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: surfaceColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: lineColor),
+                  ),
+                  child: Row(children: [
+                    Text('$myScore', style: TextStyle(
+                        color: myScore >= oppScore ? goodColor : ink2Color,
+                        fontWeight: FontWeight.w800, fontSize: 16)),
+                    Text(' — ', style: TextStyle(color: ink3Color, fontWeight: FontWeight.w700)),
+                    Text('$oppScore', style: TextStyle(
+                        color: oppScore > myScore ? red : ink2Color,
+                        fontWeight: FontWeight.w800, fontSize: 16)),
+                  ]),
                 ),
               ]),
+            ),
 
-              const SizedBox(height: 32),
+            const SizedBox(height: 12),
 
-              if (_myChoice.isEmpty && !_gameOver)
-                Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: _choices.map((c) =>
-                    GestureDetector(
-                      onTap: () => _pick(c),
-                      child: Container(
-                        width: 90, height: 90,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: inkColor.withValues(alpha: 0.08),
-                          border: Border.all(color: inkColor.withValues(alpha: 0.2), width: 1.5),
-                        ),
-                        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          Text(_emoji[c]!, style: const TextStyle(fontSize: 34)),
-                          Text(c[0].toUpperCase() + c.substring(1), style: TextStyle(color: inkColor.withValues(alpha: 0.7), fontSize: 10)),
-                        ]),
-                      ),
-                    )
-                ).toList()),
+            // ── Round progress dots ───────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(maxR, (i) {
+                  final roundIdx = i + 1;
+                  Color dotColor;
+                  double dotSize;
+                  if (roundIdx < round) {
+                    // Played round — color by winner
+                    // We approximate from score: can't know per-round without extra state
+                    dotColor = lineColor;
+                    dotSize = 8;
+                  } else if (roundIdx == round) {
+                    dotColor = xColor;
+                    dotSize = 12;
+                  } else {
+                    dotColor = lineColor;
+                    dotSize = 8;
+                  }
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: dotSize, height: dotSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: dotColor,
+                      boxShadow: roundIdx == round
+                          ? [BoxShadow(color: xColor.withValues(alpha: 0.4), blurRadius: 8)]
+                          : [],
+                    ),
+                  );
+                }),
+              ),
+            ),
 
-              if (_myChoice.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Text('Picked: ${_emoji[_myChoice]} ${_myChoice[0].toUpperCase()}${_myChoice.substring(1)}',
-                      style: TextStyle(color: xColor, fontWeight: FontWeight.bold, fontSize: 18)),
+            const SizedBox(height: 16),
+
+            // ── Timer ring ────────────────────────────────────────────────
+            if (!_gameOver && _myChoice.isEmpty)
+              AnimatedBuilder(
+                animation: _pulseCtrl,
+                builder: (_, child) => Transform.scale(
+                  scale: timerDanger ? _pulseAnim.value : 1.0,
+                  child: child,
                 ),
-            ])),
-          ),
-        ));
-  }
+                child: Stack(alignment: Alignment.center, children: [
+                  SizedBox(
+                    width: 64, height: 64,
+                    child: CircularProgressIndicator(
+                      value: timerFrac,
+                      strokeWidth: 5,
+                      backgroundColor: lineColor,
+                      valueColor: AlwaysStoppedAnimation(
+                          timerDanger ? red : xColor),
+                    ),
+                  ),
+                  Text(
+                    '$_timerSecs',
+                    style: TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w800,
+                      color: timerDanger ? red : inkColor,
+                    ),
+                  ),
+                ]),
+              ),
 
-  Widget _choiceCircle({required String label, required String emoji, required Color color, required bool picked}) {
-    return Column(children: [
-      Text(label, style: TextStyle(color: inkColor.withValues(alpha: 0.6), fontSize: 11)),
-      const SizedBox(height: 8),
-      Container(
-        width: 80, height: 80,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color.withValues(alpha: picked ? 0.2 : 0.06),
-          border: Border.all(color: color.withValues(alpha: picked ? 0.7 : 0.2), width: 2),
+            // ── Result flash ──────────────────────────────────────────────
+            if (_resultMsg.isNotEmpty)
+              ScaleTransition(
+                scale: _resultAnim,
+                child: Container(
+                  margin: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _roundWon ? goodColor.withValues(alpha: 0.12) : red.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: _roundWon ? goodColor.withValues(alpha: 0.45) : red.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Text(_resultMsg,
+                      style: TextStyle(
+                        color: _roundWon ? goodColor : (_resultMsg.contains('Draw') ? ink2Color : red),
+                        fontWeight: FontWeight.w700, fontSize: 15,
+                      ), textAlign: TextAlign.center),
+                ),
+              ),
+
+            const SizedBox(height: 12),
+
+            // ── Player VS player cards ────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(children: [
+                // My card
+                Expanded(child: _PlayerCard(
+                  name: 'You',
+                  choice: _myChoice,
+                  hasPickedEmoji: _myChoice.isNotEmpty ? _emoji[_myChoice]! : null,
+                  hasPicked: _myChoice.isNotEmpty,
+                  color: xColor,
+                  revealChoice: true,
+                )),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Column(children: [
+                    Text('VS', style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w900, color: ink3Color)),
+                  ]),
+                ),
+
+                // Opponent card
+                Expanded(child: _PlayerCard(
+                  name: widget.args.oppName,
+                  choice: _state[_oppKey] as String? ?? '',
+                  hasPickedEmoji: (oppPicked && _myChoice.isNotEmpty)
+                      ? _emoji[_state[_oppKey] as String? ?? '']
+                      : null,
+                  hasPicked: oppPicked,
+                  color: oColor,
+                  // Only reveal opponent's choice after both have picked
+                  revealChoice: oppPicked && _myChoice.isNotEmpty,
+                )),
+              ]),
+            ),
+
+            const Spacer(),
+
+            // ── Pick buttons ──────────────────────────────────────────────
+            if (_myChoice.isEmpty && !_gameOver) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text('Pick your move!',
+                    style: TextStyle(fontSize: 13, color: ink2Color, fontWeight: FontWeight.w600),
+                    textAlign: TextAlign.center),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                child: Row(
+                  children: _choices.map((c) {
+                    final col = _btnColors[c]!;
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
+                        child: GestureDetector(
+                          onTap: () => _pick(c),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 140),
+                            height: 100,
+                            decoration: BoxDecoration(
+                              color: col.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: col.withValues(alpha: 0.45), width: 2),
+                              boxShadow: [BoxShadow(color: col.withValues(alpha: 0.18), blurRadius: 12, offset: const Offset(0, 4))],
+                            ),
+                            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                              Text(_emoji[c]!, style: const TextStyle(fontSize: 36)),
+                              const SizedBox(height: 4),
+                              Text(_labels[c]!,
+                                  style: TextStyle(color: col, fontWeight: FontWeight.w700, fontSize: 11, letterSpacing: 0.5)),
+                            ]),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+
+            // Waiting for opponent (after my pick)
+            if (_myChoice.isNotEmpty && !oppPicked && !_gameOver && _resultMsg.isEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  SizedBox(
+                    width: 16, height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: xColor),
+                  ),
+                  const SizedBox(width: 10),
+                  Text('Waiting for ${widget.args.oppName}…',
+                      style: TextStyle(color: ink2Color, fontSize: 13, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            ],
+
+            if (_myChoice.isNotEmpty && _resultMsg.isEmpty && oppPicked)
+              const SizedBox(height: 24),
+          ]),
         ),
-        child: Center(child: Text(emoji, style: const TextStyle(fontSize: 36))),
       ),
-    ]);
+    );
   }
 }
 
-Widget _header(BuildContext ctx, String title, String sub, int myScore, int oppScore, {VoidCallback? onExit}) {
-  return Padding(
-    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-    child: Row(children: [
-      GestureDetector(onTap: onExit ?? () {
-        if (Navigator.canPop(ctx)) Navigator.pop(ctx);
-      }, child: Icon(Icons.close, color: inkColor.withValues(alpha: 0.7))),
-      const Spacer(),
-      Column(children: [
-        Text(title, style: TextStyle(color: inkColor, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.5)),
-        Text(sub, style: TextStyle(color: xColor, fontSize: 11)),
-      ]),
-      const Spacer(),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), color: secondaryColor),
-        child: Text('$myScore — $oppScore', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold)),
-      ),
-    ]),
-  );
-}
+// ── Player Card Widget ─────────────────────────────────────────────────────────
 
-Widget _pill(String text, Color color) {
-  return Container(
-    margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(20),
-      color: color.withValues(alpha: 0.12),
-      border: Border.all(color: color.withValues(alpha: 0.3)),
-    ),
-    child: Text(text, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500), textAlign: TextAlign.center),
-  );
+class _PlayerCard extends StatelessWidget {
+  final String name;
+  final String choice;
+  final String? hasPickedEmoji;
+  final bool hasPicked;
+  final Color color;
+  final bool revealChoice;
+
+  const _PlayerCard({
+    required this.name,
+    required this.choice,
+    required this.hasPickedEmoji,
+    required this.hasPicked,
+    required this.color,
+    required this.revealChoice,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      height: 120,
+      decoration: BoxDecoration(
+        color: hasPicked ? color.withValues(alpha: 0.10) : surfaceColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: hasPicked ? color.withValues(alpha: 0.45) : lineColor,
+          width: hasPicked ? 2 : 1,
+        ),
+        boxShadow: hasPicked
+            ? [BoxShadow(color: color.withValues(alpha: 0.15), blurRadius: 14)]
+            : [shadowSm],
+      ),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        // Emoji or waiting indicator
+        if (revealChoice && hasPickedEmoji != null)
+          Text(hasPickedEmoji!, style: const TextStyle(fontSize: 40))
+        else if (hasPicked && !revealChoice)
+          // Opponent picked but we don't show what yet
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.check_rounded, color: color, size: 26),
+          )
+        else
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(
+              color: lineColor.withValues(alpha: 0.5),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.help_outline_rounded, color: ink3Color, size: 24),
+          ),
+
+        const SizedBox(height: 8),
+
+        // Name
+        Text(name,
+            style: TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w700,
+              color: hasPicked ? color : ink2Color,
+            ),
+            maxLines: 1, overflow: TextOverflow.ellipsis),
+
+        // Status label
+        const SizedBox(height: 2),
+        Text(
+          hasPicked ? (revealChoice ? '' : 'Picked ✓') : 'Waiting…',
+          style: TextStyle(fontSize: 10, color: hasPicked ? color.withValues(alpha: 0.7) : ink3Color),
+        ),
+      ]),
+    );
+  }
 }

@@ -5,7 +5,6 @@ import '../../functions/arcade_service.dart';
 import '../../helpers/color.dart';
 import '../../helpers/constant.dart';
 import '../../helpers/utils.dart';
-import '../../screens/splash.dart' show utils;
 import 'game_widgets.dart';
 import '../../screens/arcade_lobby.dart';
 
@@ -21,6 +20,7 @@ class _GomokuGameScreenState extends State<GomokuGameScreen> {
   List<int> _board = List.filled(121, 0);
   int _turn = 1;
   bool _gameOver = false;
+  bool _abandoned = false;
   StreamSubscription? _sub;
   StreamSubscription? _statusSub;
   late int _myNum;
@@ -61,15 +61,27 @@ class _GomokuGameScreenState extends State<GomokuGameScreen> {
   void dispose() { _sub?.cancel(); _statusSub?.cancel(); super.dispose(); }
 
   void _abandonGame() async {
-    if (_gameOver) return;
+    if (_abandoned) return;
+    _abandoned = true;
     setState(() => _gameOver = true);
     _sub?.cancel();
     _statusSub?.cancel();
     await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
-    if (mounted) Navigator.pop(context);
+    if (mounted) {
+      Navigator.of(context).popUntil((route) => route is PageRoute);
+      Navigator.of(context).pop();
+    }
   }
 
-  void _handleExit() => showLeaveConfirmDialog(context, _abandonGame);
+  void _handleExit() {
+    if (!mounted) return;
+    if (_gameOver) {
+      Navigator.of(context).popUntil((route) => route is PageRoute);
+      Navigator.of(context).pop();
+      return;
+    }
+    showLeaveConfirmDialog(context, _abandonGame);
+  }
 
   bool get _myTurn => _turn == _myNum && !_gameOver;
 

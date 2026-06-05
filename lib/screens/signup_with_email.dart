@@ -1,10 +1,8 @@
-import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../helpers/color.dart';
-import '../helpers/constant.dart';
 import '../functions/authentication.dart';
 import 'login_with_email.dart';
 import 'splash.dart';
@@ -263,7 +261,6 @@ class _AuthField extends StatelessWidget {
   final FormFieldValidator<String>? validator;
   final FormFieldSetter<String>? onSaved;
   final TextInputType keyboardType;
-  final GlobalKey<FormFieldState>? fieldKey;
 
   const _AuthField({
     required this.label,
@@ -274,7 +271,6 @@ class _AuthField extends StatelessWidget {
     this.validator,
     this.onSaved,
     this.keyboardType = TextInputType.text,
-    this.fieldKey,
   });
 
   @override
@@ -287,7 +283,6 @@ class _AuthField extends StatelessWidget {
         boxShadow: [shadowSm],
       ),
       child: TextFormField(
-        key: fieldKey,
         obscureText: isPassword && isPwdHidden,
         obscuringCharacter: '*',
         keyboardType: keyboardType,
@@ -363,26 +358,3 @@ class _PrimaryBtn extends StatelessWidget {
   }
 }
 
-class _SocialBtn extends StatelessWidget {
-  final Widget child;
-  final VoidCallback onTap;
-  const _SocialBtn({required this.child, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 52,
-        height: 52,
-        decoration: BoxDecoration(
-          color: surfaceColor,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: lineColor),
-          boxShadow: [shadowSm],
-        ),
-        child: Center(child: child),
-      ),
-    );
-  }
-}
