@@ -136,34 +136,37 @@ class FriendService {
   // ── Requests ──────────────────────────────────────────────────────────────
 
   // Returns null on success, or a user-facing error string.
+  // IMPORTANT: only reads MY own nodes — reading another user's blocked /
+  // friendRequests node is denied by the security rules and would throw.
   static Future<String?> sendRequest(String toUid, String toName) async {
-    if (toUid == _uid) return "That's you!";
-    // Block checks (both directions).
-    final iBlocked = await _db.ref().child('blocked').child(_uid).child(toUid).once();
-    if (iBlocked.snapshot.value == true) return 'You blocked this user.';
-    final theyBlocked = await _db.ref().child('blocked').child(toUid).child(_uid).once();
-    if (theyBlocked.snapshot.value == true) return 'Unable to send request.';
-    // Already friends?
-    final fr = await _db.ref().child('friends').child(_uid).child(toUid).once();
-    if (fr.snapshot.value != null) return 'Already friends.';
-    // Existing outgoing request?
-    final ex = await _db.ref().child('friendRequests').child(toUid).child(_uid).once();
-    if (ex.snapshot.value != null) return 'Request already sent.';
-
-    String myName = 'Player', myPic = '';
     try {
-      final u = await _db.ref().child('users').child(_uid).once();
-      final m = u.snapshot.value as Map? ?? {};
-      myName = m['username']?.toString() ?? 'Player';
-      myPic = m['profilePic']?.toString() ?? '';
-    } catch (_) {}
+      if (toUid == _uid) return "That's you!";
 
-    await _db.ref().child('friendRequests').child(toUid).child(_uid).set({
-      'fromName': myName,
-      'fromPic': myPic,
-      'time': ServerValue.timestamp,
-    });
-    return null;
+      // My-side checks only (allowed to read my own nodes).
+      final iBlocked = await _db.ref().child('blocked').child(_uid).child(toUid).once();
+      if (iBlocked.snapshot.value == true) return 'You blocked this user. Unblock first.';
+      final fr = await _db.ref().child('friends').child(_uid).child(toUid).once();
+      if (fr.snapshot.value != null) return 'Already friends.';
+
+      String myName = 'Player', myPic = '';
+      try {
+        final u = await _db.ref().child('users').child(_uid).once();
+        final m = u.snapshot.value as Map? ?? {};
+        myName = m['username']?.toString() ?? 'Player';
+        myPic = m['profilePic']?.toString() ?? '';
+      } catch (_) {}
+
+      // Writing to the recipient's request node is allowed (rule grants write
+      // when auth.uid === the fromUid child key). Re-sending is idempotent.
+      await _db.ref().child('friendRequests').child(toUid).child(_uid).set({
+        'fromName': myName,
+        'fromPic': myPic,
+        'time': ServerValue.timestamp,
+      });
+      return null;
+    } catch (e) {
+      return 'Could not send request. Make sure the Firebase rules are applied.';
+    }
   }
 
   static Stream<List<FriendRequest>> incomingRequests() {
@@ -257,37 +260,40 @@ class FriendService {
     });
   }
 
-  static Future<bool> isBlockedEither(String otherUid) async {
+  // Only checks MY block list — the rules forbid reading another user's
+  // blocked node. If they blocked me, my message still writes (chat rule is
+  // auth-open) but their side hides the chat (soft block).
+  static Future<bool> iBlocked(String otherUid) async {
     final a = await _db.ref().child('blocked').child(_uid).child(otherUid).once();
-    if (a.snapshot.value == true) return true;
-    final b = await _db.ref().child('blocked').child(otherUid).child(_uid).once();
-    return b.snapshot.value == true;
+    return a.snapshot.value == true;
   }
 
   // ── Chat ──────────────────────────────────────────────────────────────────
 
-  // Returns null on success, or a user-facing error string.
+  // Fire-and-forget send: no pre-read round trips, so it's instant. RTDB's
+  // local latency compensation echoes the new message to the stream immediately.
+  // Returns null on success, or an error string.
   static Future<String?> sendMessage(String otherUid, String text) async {
     final t = text.trim();
     if (t.isEmpty) return null;
-    // Must be friends and neither blocked.
-    final fr = await _db.ref().child('friends').child(_uid).child(otherUid).once();
-    if (fr.snapshot.value == null) return 'You are not friends.';
-    if (await isBlockedEither(otherUid)) return 'Messaging unavailable.';
-
-    final id = chatId(_uid, otherUid);
-    await _db.ref().child('chats').child(id).push().set({
-      'from': _uid,
-      'text': t,
-      'time': ServerValue.timestamp,
-      'seen': false,
-    });
-    return null;
+    try {
+      final id = chatId(_uid, otherUid);
+      await _db.ref().child('chats').child(id).push().set({
+        'from': _uid,
+        'text': t,
+        'time': ServerValue.timestamp,
+        'seen': false,
+      });
+      return null;
+    } catch (e) {
+      return 'Could not send. Check Firebase rules / connection.';
+    }
   }
 
   static Stream<List<ChatMessage>> messages(String otherUid) {
     final id = chatId(_uid, otherUid);
-    return _db.ref().child('chats').child(id).orderByChild('time').onValue.map((ev) {
+    // Plain onValue (no orderByChild → no index requirement); we sort locally.
+    return _db.ref().child('chats').child(id).onValue.map((ev) {
       final v = ev.snapshot.value;
       if (v is! Map) return <ChatMessage>[];
       final out = <ChatMessage>[];
@@ -306,24 +312,19 @@ class FriendService {
     });
   }
 
-  // Marks all incoming (from the other user) messages as seen + records read time.
-  static Future<void> markRead(String otherUid) async {
+  // Lightweight read-receipt: one multi-path write, only the given unseen keys.
+  // No .once() read — the caller passes the ids it already has from the stream,
+  // so this never causes a re-read storm.
+  static Future<void> markRead(String otherUid, {Iterable<String> unseenIds = const []}) async {
     final id = chatId(_uid, otherUid);
-    await _db.ref().child('chatMeta').child(id).child('lastRead').child(_uid)
-        .set(ServerValue.timestamp);
+    final updates = <String, dynamic>{
+      'chatMeta/$id/lastRead/$_uid': ServerValue.timestamp,
+    };
+    for (final k in unseenIds) {
+      updates['chats/$id/$k/seen'] = true;
+    }
     try {
-      final snap = await _db.ref().child('chats').child(id).once();
-      final v = snap.snapshot.value;
-      if (v is! Map) return;
-      final updates = <String, dynamic>{};
-      v.forEach((key, val) {
-        if (val is Map && val['from'] != _uid && val['seen'] != true) {
-          updates['$key/seen'] = true;
-        }
-      });
-      if (updates.isNotEmpty) {
-        await _db.ref().child('chats').child(id).update(updates);
-      }
+      await _db.ref().update(updates);
     } catch (_) {}
   }
 

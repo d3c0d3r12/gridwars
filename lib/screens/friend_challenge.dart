@@ -19,6 +19,7 @@ Future<void> startChallenge(
   final gameType = await showModalBottomSheet<String>(
     context: context,
     backgroundColor: surfaceColor,
+    isScrollControlled: true,
     shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
     builder: (_) => _GamePickerSheet(friendName: friendName),
@@ -84,52 +85,62 @@ class _GamePickerSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final games = challengeableTags;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          width: 40, height: 4,
-          decoration: BoxDecoration(
-              color: lineColor, borderRadius: BorderRadius.circular(2)),
-        ),
-        const SizedBox(height: 16),
-        Text('Challenge ${utils.limitChar(friendName, 14)}',
-            style: TextStyle(color: inkColor, fontWeight: FontWeight.w800, fontSize: 16)),
-        const SizedBox(height: 4),
-        Text('Entry: $fixedEntryFee coins • Winner takes all',
-            style: TextStyle(color: ink2Color, fontSize: 12)),
-        const SizedBox(height: 16),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          crossAxisSpacing: 12, mainAxisSpacing: 12,
-          childAspectRatio: 1.5,
-          children: games.map((g) => GestureDetector(
-            onTap: () => Navigator.pop(context, g.id),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                color: surfaceColor,
-                border: Border.all(color: g.color.withValues(alpha: 0.4)),
-                boxShadow: [shadowSm],
-              ),
-              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Container(
-                  padding: const EdgeInsets.all(9),
+    final maxH = MediaQuery.of(context).size.height * 0.7;
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxH),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40, height: 4,
+            decoration: BoxDecoration(
+                color: lineColor, borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(height: 16),
+          Text('Challenge ${utils.limitChar(friendName, 14)}',
+              style: TextStyle(color: inkColor, fontWeight: FontWeight.w800, fontSize: 16)),
+          const SizedBox(height: 4),
+          Text('Entry: $fixedEntryFee coins • Winner takes all',
+              style: TextStyle(color: ink2Color, fontSize: 12)),
+          const SizedBox(height: 14),
+          Flexible(
+            child: GridView.count(
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              crossAxisCount: 2,
+              crossAxisSpacing: 12, mainAxisSpacing: 12,
+              childAspectRatio: 1.7,
+              children: games.map((g) => GestureDetector(
+                onTap: () => Navigator.pop(context, g.id),
+                child: Container(
                   decoration: BoxDecoration(
-                      color: g.color.withValues(alpha: 0.12), shape: BoxShape.circle),
-                  child: Icon(g.icon, color: g.color, size: 22),
+                    borderRadius: BorderRadius.circular(16),
+                    color: surfaceColor,
+                    border: Border.all(color: g.color.withValues(alpha: 0.4)),
+                    boxShadow: [shadowSm],
+                  ),
+                  child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                          color: g.color.withValues(alpha: 0.12), shape: BoxShape.circle),
+                      child: Icon(g.icon, color: g.color, size: 20),
+                    ),
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Text(g.name,
+                          style: TextStyle(color: inkColor, fontWeight: FontWeight.w700, fontSize: 12),
+                          textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    ),
+                  ]),
                 ),
-                const SizedBox(height: 6),
-                Text(g.name,
-                    style: TextStyle(color: inkColor, fontWeight: FontWeight.w700, fontSize: 12),
-                    textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
-              ]),
+              )).toList(),
             ),
-          )).toList(),
-        ),
-      ]),
+          ),
+        ]),
+      ),
     );
   }
 }
