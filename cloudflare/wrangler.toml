@@ -1,0 +1,7 @@
+name = "chillzone-push"
+main = "worker.js"
+compatibility_date = "2024-09-01"
+
+# SERVICE_ACCOUNT is added as a SECRET, not here. Either:
+#   wrangler secret put SERVICE_ACCOUNT      (paste the JSON)
+# or via the Cloudflare dashboard → Worker → Settings → Variables → add Secret.
