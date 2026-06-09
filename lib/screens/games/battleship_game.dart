@@ -66,7 +66,6 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
         }
       });
 
-      // Call _endGame AFTER setState so widget tree is consistent.
       if (_myHits >= _totalShipCells && !_gameOver) {
         Future.microtask(() => _endGame(false));
       } else if (_oppHits >= _totalShipCells && !_gameOver) {
@@ -100,16 +99,14 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
     _statusSub?.cancel();
     await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
     if (mounted && !_disposed) {
-      Navigator.of(context).popUntil((route) => route is PageRoute);
-      Navigator.of(context).pop();
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
   void _handleExit() {
     if (!mounted) return;
     if (_gameOver) {
-      Navigator.of(context).popUntil((route) => route is PageRoute);
-      Navigator.of(context).pop();
+      Navigator.of(context).popUntil((route) => route.isFirst);
       return;
     }
     showLeaveConfirmDialog(context, _abandonGame);
@@ -125,9 +122,7 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
     final updates = {myKey: 1, shipsKey: _myShips};
     await ArcadeService.updateState(widget.args.type, widget.args.gameId, updates);
 
-    // Only P1 writes the phase transition to avoid the race condition where
-    // both players detect _oppReady==true simultaneously and both write
-    // 'attack', causing duplicate Firebase writes with potentially stale ready flags.
+    // Only P1 writes the phase transition to avoid race condition
     if (_oppReady && widget.args.isP1) {
       await ArcadeService.updateState(widget.args.type, widget.args.gameId, {
         'phase': 'attack',
@@ -162,16 +157,12 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
     final currentHits = int.parse(st[oppHitsKey].toString());
     final newHits = currentHits + (isHit ? 1 : 0);
 
-    // FIXED: Proper turn switching
     int nextTurn = _turn;
     if (newHits >= _totalShipCells) {
-      // Game over - no need to switch turn
       nextTurn = _turn;
     } else if (!isHit) {
-      // Miss - switch turn
       nextTurn = _turn == 1 ? 2 : 1;
     } else {
-      // Hit - same player gets another turn
       nextTurn = _turn;
     }
 
@@ -192,136 +183,234 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
   }
 
   void _showResult(bool won) {
-    showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
-      backgroundColor: surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
-      title: Text(won ? '🏆 All Ships Sunk!' : '💥 Fleet Destroyed!', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      content: Text(won ? 'You Win!\n+${widget.args.entryFee * 2} coins' : 'You Lose!', style: TextStyle(color: xColor, fontSize: 18), textAlign: TextAlign.center),
-      actions: [TextButton(onPressed: () {
-        if (Navigator.canPop(context)) Navigator.pop(context);
-        if (Navigator.canPop(context)) Navigator.pop(context);
-      }, child: Text('Back', style: TextStyle(color: xColor)))],
-    ));
+    showDialog(
+      context: context, 
+      barrierDismissible: false, 
+      builder: (_) => AlertDialog(
+        backgroundColor: surfaceColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20), 
+          side: BorderSide(color: xColor.withValues(alpha: 0.4))
+        ),
+        title: Text(
+          won ? '🏆 All Ships Sunk!' : '💥 Fleet Destroyed!', 
+          style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), 
+          textAlign: TextAlign.center
+        ),
+        content: Text(
+          won ? 'You Win!\n+${widget.args.entryFee * 2} coins' : 'You Lose!', 
+          style: TextStyle(color: xColor, fontSize: 18), 
+          textAlign: TextAlign.center
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              if (Navigator.canPop(context)) Navigator.pop(context);
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted && Navigator.canPop(context)) {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                }
+              });
+            }, 
+            child: Text('Back', style: TextStyle(color: xColor, fontWeight: FontWeight.w600))
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) { if (!didPop && !_disposed) _handleExit(); },
-        child: Scaffold(
-          body: Container(
-            color: bgColor,
-            child: SafeArea(child: Column(children: [
-              gameHeader(context, 'BATTLESHIP',
-                  _phase == 'placement' ? 'Setup Phase' : (_myTurn ? 'Your Turn — Fire!' : "${widget.args.oppName}'s Turn"),
-                  _oppHits, _myHits, onExit: _handleExit),
-              const SizedBox(height: 6),
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) { 
+        if (!didPop && !_disposed) _handleExit(); 
+      },
+      child: Scaffold(
+        backgroundColor: bgColor,
+        body: SafeArea(
+          child: Column(children: [
+            gameHeader(
+              context, 
+              'BATTLESHIP',
+              _phase == 'placement' 
+                  ? 'Setup Phase' 
+                  : (_myTurn ? 'Your Turn — Fire!' : "${widget.args.oppName}'s Turn"),
+              _oppHits, 
+              _myHits, 
+              onExit: _handleExit
+            ),
+            const SizedBox(height: 6),
 
-              if (_phase == 'placement') ...[
-                gamePill(_myReady ? 'Waiting for ${widget.args.oppName}…' : 'Place your fleet and press READY!', secondarySelectedColor),
-                const SizedBox(height: 8),
-                Expanded(child: Padding(
+            if (_phase == 'placement') ...[
+              gamePill(
+                _myReady ? 'Waiting for ${widget.args.oppName}…' : 'Place your fleet and press READY!', 
+                secondarySelectedColor
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Column(children: [
-                    Text('YOUR FLEET', style: TextStyle(color: inkColor.withValues(alpha: 0.6), fontSize: 11, letterSpacing: 2)),
+                    Text(
+                      'YOUR FLEET', 
+                      style: TextStyle(color: inkColor.withValues(alpha: 0.6), fontSize: 11, letterSpacing: 2)
+                    ),
                     const SizedBox(height: 6),
                     Expanded(child: _grid(_myShips, isMyGrid: true, readonly: _myReady)),
                     const SizedBox(height: 12),
-                    if (!_myReady) Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                      _btn('🔀 Randomize', _randomize, const Color(0xFF2196F3)),
-                      _btn('✅ Ready!', _readyUp, const Color(0xFF4CAF50)),
-                    ]),
+                    if (!_myReady) 
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly, 
+                        children: [
+                          _btn('🔀 Randomize', _randomize, const Color(0xFF2196F3)),
+                          _btn('✅ Ready!', _readyUp, const Color(0xFF4CAF50)),
+                        ]
+                      ),
                   ]),
-                )),
-              ] else ...[
-                if (_myTurn) gamePill('Tap opponent\'s grid to fire! 🎯', secondarySelectedColor),
-                if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName} is firing…", inkColor.withValues(alpha: 0.5)),
-                const SizedBox(height: 6),
-                Expanded(child: Padding(
+                ),
+              ),
+            ] else ...[
+              if (_myTurn) 
+                gamePill('Tap opponent\'s grid to fire! 🎯', secondarySelectedColor),
+              if (!_myTurn && !_gameOver) 
+                gamePill("${widget.args.oppName} is firing…", inkColor.withValues(alpha: 0.5)),
+              const SizedBox(height: 6),
+              Expanded(
+                child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Column(children: [
-                    Text('OPPONENT WATERS', style: TextStyle(color: inkColor.withValues(alpha: 0.6), fontSize: 10, letterSpacing: 2)),
+                    Text(
+                      'OPPONENT WATERS', 
+                      style: TextStyle(color: inkColor.withValues(alpha: 0.6), fontSize: 10, letterSpacing: 2)
+                    ),
                     const SizedBox(height: 4),
-                    Expanded(child: GestureDetector(
-                      onTapUp: (det) {
-                        final size = (MediaQuery.of(context).size.width - 24) / 10;
-                        final col = (det.localPosition.dx / size).floor().clamp(0, 9);
-                        final row = (det.localPosition.dy / size).floor().clamp(0, 9);
-                        _fire(row * 10 + col);
-                      },
-                      child: _grid(_oppAttacks, isMyGrid: false, readonly: !_myTurn),
-                    )),
+                    Expanded(
+                      child: GestureDetector(
+                        onTapUp: (det) {
+                          final size = (MediaQuery.of(context).size.width - 24) / 10;
+                          final col = (det.localPosition.dx / size).floor().clamp(0, 9);
+                          final row = (det.localPosition.dy / size).floor().clamp(0, 9);
+                          _fire(row * 10 + col);
+                        },
+                        child: _grid(_oppAttacks, isMyGrid: false, readonly: !_myTurn),
+                      ),
+                    ),
                     const SizedBox(height: 8),
-                    Text('YOUR FLEET', style: TextStyle(color: inkColor.withValues(alpha: 0.6), fontSize: 10, letterSpacing: 2)),
+                    Text(
+                      'YOUR FLEET', 
+                      style: TextStyle(color: inkColor.withValues(alpha: 0.6), fontSize: 10, letterSpacing: 2)
+                    ),
                     const SizedBox(height: 4),
-                    SizedBox(height: MediaQuery.of(context).size.height * 0.22,
-                        child: _gridWithAttacks(_myShips, _myAttacks)),
+                    SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.22,
+                      child: _gridWithAttacks(_myShips, _myAttacks)
+                    ),
                   ]),
-                )),
-              ],
-              const SizedBox(height: 8),
-            ])),
-          ),
-        ));
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+          ]),
+        ),
+      ),
+    );
   }
 
   Widget _grid(List<int> data, {required bool isMyGrid, required bool readonly}) {
-    return AspectRatio(aspectRatio: 1, child: GridView.builder(
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 10, crossAxisSpacing: 2, mainAxisSpacing: 2),
-      itemCount: 100,
-      itemBuilder: (_, i) {
-        final val = data[i];
-        Color bg;
-        String icon = '';
-        if (isMyGrid) {
-          bg = val == 1 ? const Color(0xFF37474F) : secondaryColor;
-        } else {
-          bg = val == 0 ? secondaryColor.withValues(alpha: 0.5) : val == 2 ? const Color(0xFFE53935) : const Color(0xFF455A64);
-          if (val == 2) icon = '💥';
-          if (val == 3) icon = '○';
-        }
-        return Container(
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(2),
-            border: Border.all(color: inkColor.withValues(alpha: 0.08), width: 0.5),
-          ),
-          child: Center(child: Text(icon, style: const TextStyle(fontSize: 8))),
-        );
-      },
-    ));
+    return AspectRatio(
+      aspectRatio: 1, 
+      child: GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 10, 
+          crossAxisSpacing: 2, 
+          mainAxisSpacing: 2
+        ),
+        itemCount: 100,
+        itemBuilder: (_, i) {
+          final val = data[i];
+          Color bg;
+          String icon = '';
+          if (isMyGrid) {
+            bg = val == 1 ? const Color(0xFF37474F) : surface2Color;
+          } else {
+            bg = val == 0 
+                ? surface2Color.withValues(alpha: 0.5) 
+                : val == 2 ? const Color(0xFFE53935) : const Color(0xFF455A64);
+            if (val == 2) icon = '💥';
+            if (val == 3) icon = '○';
+          }
+          return Container(
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: inkColor.withValues(alpha: 0.1), width: 0.5),
+            ),
+            child: Center(
+              child: Text(icon, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Widget _gridWithAttacks(List<int> ships, List<int> attacks) {
-    return AspectRatio(aspectRatio: 1, child: GridView.builder(
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 10, crossAxisSpacing: 2, mainAxisSpacing: 2),
-      itemCount: 100,
-      itemBuilder: (_, i) {
-        final ship = ships[i];
-        final atk  = attacks[i];
-        Color bg;
-        String icon = '';
-        if (atk == 2) { bg = const Color(0xFFE53935); icon = '💥'; }
-        else if (atk == 3) { bg = const Color(0xFF455A64); icon = '○'; }
-        else if (ship == 1) bg = const Color(0xFF37474F);
-        else bg = secondaryColor;
-        return Container(
-          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(2), border: Border.all(color: inkColor.withValues(alpha: 0.08), width: 0.5)),
-          child: Center(child: Text(icon, style: const TextStyle(fontSize: 8))),
-        );
-      },
-    ));
+    return AspectRatio(
+      aspectRatio: 1, 
+      child: GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 10, 
+          crossAxisSpacing: 2, 
+          mainAxisSpacing: 2
+        ),
+        itemCount: 100,
+        itemBuilder: (_, i) {
+          final ship = ships[i];
+          final atk  = attacks[i];
+          Color bg;
+          String icon = '';
+          if (atk == 2) { 
+            bg = const Color(0xFFE53935); 
+            icon = '💥'; 
+          } else if (atk == 3) { 
+            bg = const Color(0xFF455A64); 
+            icon = '○'; 
+          } else if (ship == 1) {
+            bg = const Color(0xFF37474F);
+          } else {
+            bg = surface2Color;
+          }
+          return Container(
+            decoration: BoxDecoration(
+              color: bg, 
+              borderRadius: BorderRadius.circular(4), 
+              border: Border.all(color: inkColor.withValues(alpha: 0.1), width: 0.5)
+            ),
+            child: Center(
+              child: Text(icon, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Widget _btn(String label, VoidCallback onTap, Color color) => GestureDetector(
     onTap: onTap,
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: color.withValues(alpha: 0.2), border: Border.all(color: color.withValues(alpha: 0.5))),
-      child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12), 
+        color: color.withValues(alpha: 0.15), 
+        border: Border.all(color: color.withValues(alpha: 0.5))
+      ),
+      child: Text(
+        label, 
+        style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)
+      ),
     ),
   );
 }

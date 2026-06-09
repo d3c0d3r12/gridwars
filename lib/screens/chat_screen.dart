@@ -22,9 +22,11 @@ class _ChatScreenState extends State<ChatScreen> {
   final _ctrl = TextEditingController();
   final _scroll = ScrollController();
   final _myUid = FirebaseAuth.instance.currentUser!.uid;
-  final Set<String> _marked = {}; // message ids already marked seen (loop guard)
+  final Set<String> _marked = {};
   bool _blocked = false;
   bool _canSend = false;
+  bool _isLoading = true;
+  bool _isScrolling = false;
 
   @override
   void initState() {
@@ -32,7 +34,7 @@ class _ChatScreenState extends State<ChatScreen> {
     FriendService.goOnline();
     _ctrl.addListener(() {
       final can = _ctrl.text.trim().isNotEmpty;
-      if (can != _canSend) setState(() => _canSend = can);
+      if (can != _canSend && mounted) setState(() => _canSend = can);
     });
     _checkBlock();
   }
@@ -40,8 +42,13 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _checkBlock() async {
     try {
       final b = await FriendService.iBlocked(widget.friendUid);
-      if (mounted) setState(() => _blocked = b);
-    } catch (_) {}
+      if (mounted) setState(() {
+        _blocked = b;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -56,21 +63,32 @@ class _ChatScreenState extends State<ChatScreen> {
     if (text.isEmpty) return;
     _ctrl.clear();
     setState(() => _canSend = false);
-    // Fire-and-forget — RTDB echoes it back instantly via the stream.
     FriendService.sendMessage(widget.friendUid, text).then((err) {
       if (err != null && mounted) utils.setSnackbar(context, err);
     });
     _scrollToBottom(animated: true);
   }
 
+  // FIXED: Debounced scroll to bottom
   void _scrollToBottom({bool animated = false}) {
+    if (_isScrolling) return;
+    _isScrolling = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scroll.hasClients) return;
+      if (!mounted || !_scroll.hasClients) {
+        _isScrolling = false;
+        return;
+      }
       final target = _scroll.position.maxScrollExtent;
-      animated
-          ? _scroll.animateTo(target,
-              duration: const Duration(milliseconds: 200), curve: Curves.easeOut)
-          : _scroll.jumpTo(target);
+      if (animated) {
+        _scroll.animateTo(
+          target,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        ).then((_) => _isScrolling = false);
+      } else {
+        _scroll.jumpTo(target);
+        _isScrolling = false;
+      }
     });
   }
 
@@ -164,10 +182,11 @@ class _ChatScreenState extends State<ChatScreen> {
             },
           ),
         ])),
+        // FIXED: Challenge button properly disabled when blocked
         IconButton(
-          icon: Icon(Icons.sports_esports_rounded, color: xColor, size: 22),
+          icon: Icon(Icons.sports_esports_rounded, color: _blocked ? ink3Color : xColor, size: 22),
           tooltip: 'Challenge',
-          onPressed: _blocked ? null : () => startChallenge(context, widget.friendUid, widget.friendName),
+          onPressed: _blocked || _isLoading ? null : () => startChallenge(context, widget.friendUid, widget.friendName),
         ),
         PopupMenuButton<String>(
           icon: Icon(Icons.more_vert_rounded, color: ink2Color),
@@ -176,10 +195,16 @@ class _ChatScreenState extends State<ChatScreen> {
           onSelected: (v) async {
             if (v == 'block') {
               await FriendService.blockUser(widget.friendUid);
-              if (mounted) { setState(() => _blocked = true); utils.setSnackbar(context, 'Blocked ${widget.friendName}'); }
+              if (mounted) { 
+                setState(() => _blocked = true); 
+                utils.setSnackbar(context, 'Blocked ${widget.friendName}');
+              }
             } else if (v == 'unblock') {
               await FriendService.unblockUser(widget.friendUid);
-              if (mounted) { setState(() => _blocked = false); utils.setSnackbar(context, 'Unblocked ${widget.friendName}'); }
+              if (mounted) { 
+                setState(() => _blocked = false); 
+                utils.setSnackbar(context, 'Unblocked ${widget.friendName}');
+              }
             }
           },
           itemBuilder: (_) => [
@@ -193,8 +218,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _menuRow(IconData i, String t, Color c) => Row(children: [
-        Icon(i, color: c, size: 18), const SizedBox(width: 10),
-        Text(t, style: TextStyle(color: c == red ? red : inkColor)),
+        Icon(i, color: c, size: 18), 
+        const SizedBox(width: 10),
+        Text(t, style: TextStyle(color: c == red ? red : inkColor, fontWeight: FontWeight.w500)),
       ]);
 
   // ── Messages ───────────────────────────────────────────────────────────────
@@ -206,9 +232,10 @@ class _ChatScreenState extends State<ChatScreen> {
         if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
           return Center(child: CircularProgressIndicator(color: xColor, strokeWidth: 2.5));
         }
+        
         final msgs = snap.data ?? [];
 
-        // Mark incoming unseen as read — once each (loop-safe via _marked set).
+        // Mark incoming unseen as read
         final unseen = msgs
             .where((m) => m.from != _myUid && !m.seen && !_marked.contains(m.id))
             .map((m) => m.id)
@@ -220,14 +247,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
         if (msgs.isEmpty) {
           return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.waving_hand_rounded, color: ink3Color, size: 44),
+            Icon(Icons.waving_hand_rounded, color: ink3Color.withValues(alpha: 0.7), size: 48),
             const SizedBox(height: 12),
             Text('Say hi to ${widget.friendName}!',
                 style: TextStyle(color: ink2Color, fontSize: 14)),
+            const SizedBox(height: 8),
+            Text('They\'ll get a notification',
+                style: TextStyle(color: ink3Color, fontSize: 12)),
           ]));
         }
 
-        _scrollToBottom();
+        // Only scroll to bottom on new messages (when length changes)
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && snap.hasData && snap.data!.length != msgs.length) {
+            _scrollToBottom(animated: true);
+          }
+        });
 
         return ListView.builder(
           controller: _scroll,
@@ -239,16 +274,18 @@ class _ChatScreenState extends State<ChatScreen> {
             final next = i < msgs.length - 1 ? msgs[i + 1] : null;
             final mine = m.from == _myUid;
 
-            // Day separator when the date changes.
             final showDay = prev == null ||
                 _dayLabel(prev.time) != _dayLabel(m.time);
-            // Group consecutive messages from the same sender.
-            final groupedWithNext = next != null && next.from == m.from &&
-                _dayLabel(next.time) == _dayLabel(m.time);
+            
+            // Group consecutive messages from same sender
+            final isGroupStart = prev == null || prev.from != m.from ||
+                _dayLabel(prev.time) != _dayLabel(m.time);
+            final isGroupEnd = next == null || next.from != m.from ||
+                _dayLabel(next.time) != _dayLabel(m.time);
 
             return Column(children: [
               if (showDay) _daySeparator(m.time),
-              _bubble(m, mine, tail: !groupedWithNext),
+              _bubble(m, mine, tail: isGroupEnd),
             ]);
           },
         );
@@ -261,7 +298,7 @@ class _ChatScreenState extends State<ChatScreen> {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Center(
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
             color: surface2Color,
             borderRadius: BorderRadius.circular(999),
@@ -281,37 +318,61 @@ class _ChatScreenState extends State<ChatScreen> {
       bottomLeft: Radius.circular(mine ? 18 : (tail ? 4 : 18)),
       bottomRight: Radius.circular(mine ? (tail ? 4 : 18) : 18),
     );
+    
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.76),
         margin: EdgeInsets.only(bottom: tail ? 8 : 2, top: 1),
-        padding: const EdgeInsets.fromLTRB(14, 9, 12, 7),
+        padding: const EdgeInsets.fromLTRB(14, 10, 12, 8),
         decoration: BoxDecoration(
           gradient: mine
               ? LinearGradient(
                   colors: [xColor, xColor.withValues(alpha: 0.88)],
-                  begin: Alignment.topLeft, end: Alignment.bottomRight)
+                  begin: Alignment.topLeft, 
+                  end: Alignment.bottomRight)
               : null,
           color: mine ? null : surfaceColor,
           borderRadius: radius,
           border: mine ? null : Border.all(color: lineColor),
-          boxShadow: [shadowSm],
+          boxShadow: mine ? null : [shadowSm],
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text(m.text, style: TextStyle(
-            color: mine ? Colors.white : inkColor, fontSize: 14.5, height: 1.32)),
-          const SizedBox(height: 2),
-          Row(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.end, children: [
-            Text(_fmtTime(m.time), style: TextStyle(
-              color: mine ? Colors.white.withValues(alpha: 0.75) : ink3Color, fontSize: 9.5)),
-            if (mine) ...[
-              const SizedBox(width: 3),
-              Icon(m.seen ? Icons.done_all_rounded : Icons.done_rounded, size: 13,
-                  color: m.seen ? const Color(0xFF9BE7FF) : Colors.white.withValues(alpha: 0.75)),
-            ],
-          ]),
-        ]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, 
+          mainAxisSize: MainAxisSize.min, 
+          children: [
+            Text(
+              m.text, 
+              style: TextStyle(
+                color: mine ? Colors.white : inkColor, 
+                fontSize: 14.5, 
+                height: 1.32
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min, 
+              mainAxisAlignment: MainAxisAlignment.end, 
+              children: [
+                Text(
+                  _fmtTime(m.time), 
+                  style: TextStyle(
+                    color: mine ? Colors.white.withValues(alpha: 0.7) : ink3Color, 
+                    fontSize: 9.5
+                  ),
+                ),
+                if (mine) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    m.seen ? Icons.done_all_rounded : Icons.done_rounded, 
+                    size: 13,
+                    color: m.seen ? const Color(0xFF9BE7FF) : Colors.white.withValues(alpha: 0.7),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -319,15 +380,31 @@ class _ChatScreenState extends State<ChatScreen> {
   // ── Input bar ──────────────────────────────────────────────────────────────
 
   Widget _inputBar() {
+    if (_isLoading) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        width: double.infinity,
+        color: surfaceColor,
+        child: Center(
+          child: SizedBox(
+            width: 20, height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2, color: xColor),
+          ),
+        ),
+      );
+    }
+    
     if (_blocked) {
       return Container(
         padding: const EdgeInsets.all(16),
         width: double.infinity,
         color: surfaceColor,
         child: Text('You blocked this user. Unblock to message.',
-            textAlign: TextAlign.center, style: TextStyle(color: ink3Color, fontSize: 13)),
+            textAlign: TextAlign.center, 
+            style: TextStyle(color: ink3Color, fontSize: 13, fontWeight: FontWeight.w500)),
       );
     }
+    
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
       decoration: BoxDecoration(
@@ -340,19 +417,20 @@ class _ChatScreenState extends State<ChatScreen> {
             constraints: const BoxConstraints(maxHeight: 120),
             decoration: BoxDecoration(
               color: surface2Color,
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(color: lineColor),
             ),
             child: TextField(
               controller: _ctrl,
-              minLines: 1, maxLines: 5,
+              minLines: 1, 
+              maxLines: 5,
               textCapitalization: TextCapitalization.sentences,
               style: TextStyle(color: inkColor, fontSize: 14.5),
               decoration: InputDecoration(
                 hintText: 'Message…',
                 hintStyle: TextStyle(color: ink3Color),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
             ),
           ),
@@ -362,13 +440,20 @@ class _ChatScreenState extends State<ChatScreen> {
           onTap: _canSend ? _send : null,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            width: 46, height: 46,
+            width: 46, 
+            height: 46,
             decoration: BoxDecoration(
               color: _canSend ? xColor : ink3Color.withValues(alpha: 0.35),
               shape: BoxShape.circle,
-              boxShadow: _canSend ? [BoxShadow(color: xColor.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 4))] : [],
+              boxShadow: _canSend 
+                  ? [BoxShadow(color: xColor.withValues(alpha: 0.35), blurRadius: 10, offset: const Offset(0, 4))] 
+                  : [],
             ),
-            child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+            child: Icon(
+              _canSend ? Icons.send_rounded : Icons.send_rounded, 
+              color: Colors.white.withValues(alpha: _canSend ? 1.0 : 0.5), 
+              size: 20,
+            ),
           ),
         ),
       ]),

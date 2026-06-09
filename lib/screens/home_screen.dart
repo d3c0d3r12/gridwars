@@ -49,7 +49,7 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
   late String selectedMatrixIndex = "Three";
   late String clickAudioUrl;
   late SoundEffect loadedSound;
-  var coin;
+  var coin = 0;
   late bool canPlay;
   TextEditingController player1controller = TextEditingController();
   TextEditingController player2controller = TextEditingController();
@@ -60,6 +60,7 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
   bool _isAdmin = false;
   bool _challengePrimed = false;
   final Set<String> _seenChallenges = {};
+  bool _isNavigating = false; // FIXED: Prevent double navigation
 
   @override
   void initState() {
@@ -85,17 +86,14 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    // Check admin status
     final admin = await AdminService.isAdmin(uid);
     if (mounted) setState(() => _isAdmin = admin);
 
-    // Real-time ban listener — kicks user instantly if banned while in app
     _banSub = AdminService.bannedStream(uid).listen((banned) {
       if (!mounted || !banned) return;
       FirebaseAuth.instance.signOut();
       Navigator.of(context).pushNamedAndRemoveUntil(
           '/authscreen', (_) => false);
-      // Show ban reason
       FirebaseDatabase.instance
           .ref()
           .child('users')
@@ -112,7 +110,6 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
     });
   }
 
-  // Start in-app notifications (badges + banners) and listen for game challenges.
   void _startNotifications() {
     FriendService.goOnline();
     NotificationService.instance.onBanner = (msg) {
@@ -124,7 +121,6 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
     if (uid == null) return;
     _challengeSub = FriendService.incomingChallenges().listen((list) {
       if (!mounted) return;
-      // Prime on first load so existing challenges don't auto-pop a dialog.
       if (!_challengePrimed) {
         _challengePrimed = true;
         _seenChallenges.addAll(list.map((c) => c.id));
@@ -133,7 +129,7 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
       for (final c in list) {
         if (_seenChallenges.add(c.id)) {
           _showChallengeDialog(c);
-          break; // one at a time
+          break;
         }
       }
       _seenChallenges.retainWhere((id) => list.any((c) => c.id == id));
@@ -184,6 +180,8 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
     _coinSub?.cancel();
     _banSub?.cancel();
     _challengeSub?.cancel();
+    player1controller.dispose();
+    player2controller.dispose();
     super.dispose();
   }
 
@@ -196,6 +194,7 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
   void getSkinvalues() async {
     userSkin = await localValue.getSkinValue("user_skin");
     opponentSkin = await localValue.getSkinValue("opponent_skin");
+    if (mounted) setState(() {});
   }
 
   canP() async {
@@ -216,8 +215,6 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
 
   @override
   Widget build(BuildContext context) {
-    getSkinvalues();
-
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -328,7 +325,6 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
         child: Row(
           children: [
-            // Wordmark
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -359,7 +355,6 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
               ],
             ),
             const Spacer(),
-            // Admin button — only visible to admins
             if (_isAdmin) ...[
               GestureDetector(
                 onTap: () => Navigator.push(context,
@@ -379,10 +374,8 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
               ),
               const SizedBox(width: 8),
             ],
-            // Coin chip
             _CoinChip(coin: coin),
             const SizedBox(width: 10),
-            // Profile button (with social notification badge)
             GestureDetector(
               onTap: () {
                 music.play(click);
@@ -448,7 +441,6 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
         padding: const EdgeInsets.all(18),
         child: Stack(
           children: [
-            // Decorative marks
             Positioned(
               right: -20,
               top: -20,
@@ -491,14 +483,13 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
                           ),
                           const SizedBox(height: 3),
                           _UserRankBadge(
-                              score: coin is int ? 0 : 0, size: 'sm'),
+                              score: coin is int ? coin : 0, size: 'sm'),
                         ],
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 14),
-                // Quick play button
                 GestureDetector(
                   onTap: () => _showModeSheet(),
                   child: Container(
@@ -674,9 +665,10 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
     );
   }
 
-  // ─── Quick-play bottom sheet ───────────────────────────────────────────────
+  // ─── FIXED: Quick-play bottom sheet ───────────────────────────────────────
 
   void _showModeSheet() {
+    if (_isNavigating) return;
     music.play(click);
     showModalBottomSheet(
       context: context,
@@ -685,30 +677,59 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
       builder: (_) => _QuickPlaySheet(
         onSinglePlayer: () {
           Navigator.pop(context);
-          playButtonPressed(0);
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted && !_isNavigating) {
+              _isNavigating = true;
+              playButtonPressed(0);
+              Future.delayed(const Duration(seconds: 1), () {
+                if (mounted) _isNavigating = false;
+              });
+            }
+          });
         },
         onPassNPlay: () {
           Navigator.pop(context);
-          playButtonPressed(2);
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted && !_isNavigating) {
+              _isNavigating = true;
+              playButtonPressed(2);
+              Future.delayed(const Duration(seconds: 1), () {
+                if (mounted) _isNavigating = false;
+              });
+            }
+          });
         },
         onRanked: () {
           Navigator.pop(context);
-          playButtonPressed(1);
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted && !_isNavigating) {
+              _isNavigating = true;
+              playButtonPressed(1);
+              Future.delayed(const Duration(seconds: 1), () {
+                if (mounted) _isNavigating = false;
+              });
+            }
+          });
         },
       ),
     );
   }
 
-  // ─── Helpers ─────────────────────────────────────────────────────────────
+  // ─── FIXED: Play Button Handler ──────────────────────────────────────────
 
   void playButtonPressed(int pos) {
     music.play(click);
     if (pos == 0) {
-      selectedMatrixIndex = "Three";
-      showLevelDialog();
+      // vs Computer
+      selectedMatrixSize = "Three";
+      showLevelDialog(isBlitz: false);
     } else if (pos == 1) {
+      // Online Ranked - FIXED: Proper coin check
       _startMultiplayer();
-    } else {
+    } else if (pos == 2) {
+      // Pass & Play - FIXED: Clear controllers before showing
+      player1controller.clear();
+      player2controller.clear();
       selectPassNPlayDialog();
     }
   }
@@ -723,7 +744,7 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
 
   void _openBlitz() {
     music.play(click);
-    selectedMatrixIndex = "Three";
+    selectedMatrixSize = "Three";
     showLevelDialog(isBlitz: true);
   }
 
@@ -748,32 +769,60 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
             builder: (_) => const DailyChallengeScreen()));
   }
 
+  // ─── FIXED: Online Ranked Match ──────────────────────────────────────────
+
   void _startMultiplayer() async {
+    if (_isNavigating) return;
+    _isNavigating = true;
+    
     try {
+      // Check internet connection
       await InternetAddress.lookup('google.com');
-      if (coin >= fixedEntryFee) {
-        Navigator.push(
-          context,
-          CupertinoPageRoute(
-            builder: (context) => FindingPlayerScreen(
-              selected: fixedEntryFee,
-              round: fixedRounds,
-              matrixSize: "Three",
+      
+      // FIXED: Proper coin check with non-null value
+      final currentCoins = coin ?? 0;
+      
+      if (currentCoins >= fixedEntryFee) {
+        if (mounted) {
+          Navigator.push(
+            context,
+            CupertinoPageRoute(
+              builder: (context) => FindingPlayerScreen(
+                selected: fixedEntryFee,
+                round: fixedRounds,
+                matrixSize: "Three",
+              ),
             ),
-          ),
-        );
+          ).then((_) {
+            if (mounted) _isNavigating = false;
+          });
+        }
       } else {
-        Dialogue.lessMoney(context);
+        if (mounted) {
+          Dialogue.lessMoney(context);
+          _isNavigating = false;
+        }
       }
     } on SocketException catch (_) {
-      Dialogue().error(context);
+      if (mounted) {
+        Dialogue().error(context);
+        _isNavigating = false;
+      }
+    } catch (e) {
+      if (mounted) {
+        Dialogue().error(context);
+        _isNavigating = false;
+      }
     }
   }
+
+  // ─── FIXED: Level Dialog for vs Computer ─────────────────────────────────
 
   void showLevelDialog({bool isBlitz = false}) {
     int selectedLevelIndex = 0;
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => Dialog(
         backgroundColor: surfaceColor,
         shape: RoundedRectangleBorder(
@@ -850,33 +899,58 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
                 },
               ),
               const SizedBox(height: 16),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: xColor,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  minimumSize: const Size(double.infinity, 48),
-                  elevation: 0,
-                ),
-                onPressed: () {
-                  music.play(click);
-                  Navigator.push(
-                    context,
-                    CupertinoPageRoute(
-                      builder: (context) => SinglePlayerScreenActivity(
-                        userSkin,
-                        opponentSkin,
-                        selectedLevelIndex,
-                        "Three",
-                        timerSeconds:
-                            isBlitz ? blitzCountdown : countdowntime,
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () {
+                        music.play(click);
+                        Navigator.pop(context);
+                        _isNavigating = false;
+                      },
+                      child: Text(
+                        utils.getTranslated(context, "cancel"),
+                        style: TextStyle(color: ink2Color),
                       ),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                label: Text(utils.getTranslated(context, "next")),
+                  ),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: xColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        minimumSize: const Size(double.infinity, 48),
+                        elevation: 0,
+                      ),
+                      onPressed: () {
+                        music.play(click);
+                        Navigator.pop(context);
+                        Future.delayed(const Duration(milliseconds: 100), () {
+                          if (mounted) {
+                            Navigator.push(
+                              context,
+                              CupertinoPageRoute(
+                                builder: (context) => SinglePlayerScreenActivity(
+                                  userSkin.isNotEmpty ? userSkin : 'cross_skin',
+                                  opponentSkin.isNotEmpty ? opponentSkin : 'circle_skin',
+                                  selectedLevelIndex,
+                                  "Three",
+                                  timerSeconds: isBlitz ? blitzCountdown : countdowntime,
+                                ),
+                              ),
+                            ).then((_) {
+                              if (mounted) _isNavigating = false;
+                            });
+                          }
+                        });
+                      },
+                      icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                      label: Text(utils.getTranslated(context, "next")),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -885,11 +959,12 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
     );
   }
 
+  // ─── FIXED: Pass N Play Dialog ───────────────────────────────────────────
+
   selectPassNPlayDialog() {
-    player1controller.clear();
-    player2controller.clear();
-    return showDialog(
+    showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => Dialog(
         backgroundColor: surfaceColor,
         shape: RoundedRectangleBorder(
@@ -907,40 +982,68 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
                     fontSize: 17),
               ),
               const SizedBox(height: 16),
-              _nameField(player1controller, userSkin),
+              _nameField(player1controller, userSkin, "Player 1"),
               const SizedBox(height: 10),
-              _nameField(player2controller, opponentSkin),
+              _nameField(player2controller, opponentSkin, "Player 2"),
               const SizedBox(height: 16),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: xColor,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  minimumSize: const Size(double.infinity, 48),
-                  elevation: 0,
-                ),
-                onPressed: () async {
-                  music.play(click);
-                  if (player1controller.text.isNotEmpty &&
-                      player2controller.text.isNotEmpty) {
-                    Navigator.of(context).pop();
-                    Navigator.push(
-                      context,
-                      CupertinoPageRoute(
-                        builder: (context) => PassNPLay(
-                          player1controller.text,
-                          player2controller.text,
-                          userSkin,
-                          opponentSkin,
-                          "Three",
-                        ),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () {
+                        music.play(click);
+                        Navigator.pop(context);
+                        _isNavigating = false;
+                      },
+                      child: Text(
+                        utils.getTranslated(context, "cancel"),
+                        style: TextStyle(color: ink2Color),
                       ),
-                    );
-                  }
-                },
-                icon: const Icon(Icons.play_arrow_rounded, size: 20),
-                label: Text(utils.getTranslated(context, "start")),
+                    ),
+                  ),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: xColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        minimumSize: const Size(double.infinity, 48),
+                        elevation: 0,
+                      ),
+                      onPressed: () {
+                        music.play(click);
+                        String p1Name = player1controller.text.trim();
+                        String p2Name = player2controller.text.trim();
+                        
+                        if (p1Name.isEmpty) p1Name = "Player 1";
+                        if (p2Name.isEmpty) p2Name = "Player 2";
+                        
+                        Navigator.pop(context);
+                        Future.delayed(const Duration(milliseconds: 100), () {
+                          if (mounted) {
+                            Navigator.push(
+                              context,
+                              CupertinoPageRoute(
+                                builder: (context) => PassNPLay(
+                                  p1Name,
+                                  p2Name,
+                                  userSkin.isNotEmpty ? userSkin : 'cross_skin',
+                                  opponentSkin.isNotEmpty ? opponentSkin : 'circle_skin',
+                                  "Three",
+                                ),
+                              ),
+                            ).then((_) {
+                              if (mounted) _isNavigating = false;
+                            });
+                          }
+                        });
+                      },
+                      icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                      label: Text(utils.getTranslated(context, "start")),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -949,7 +1052,7 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
     );
   }
 
-  Widget _nameField(TextEditingController ctrl, String skinName) {
+  Widget _nameField(TextEditingController ctrl, String skinName, String hint) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
@@ -957,14 +1060,26 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
         border: Border.all(color: lineColor),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 14),
-      child: TextField(
-        controller: ctrl,
-        style: TextStyle(fontSize: 14, color: inkColor),
-        decoration: InputDecoration(
-          border: InputBorder.none,
-          hintText: utils.getTranslated(context, "playerName"),
-          hintStyle: TextStyle(color: ink3Color),
-        ),
+      child: Row(
+        children: [
+          getSvgImage(
+            imageName: skinName.isNotEmpty ? skinName : 'cross_skin',
+            height: 20,
+            width: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: ctrl,
+              style: TextStyle(fontSize: 14, color: inkColor),
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                hintText: hint,
+                hintStyle: TextStyle(color: ink3Color),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1061,247 +1176,7 @@ Widget _coinPill(String label) {
   );
 }
 
-// ── Mode card ──────────────────────────────────────────────────────────────────
-
-class _ModeCard extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final Color iconBg;
-  final String title;
-  final String sub;
-  final VoidCallback onTap;
-  final bool accent;
-
-  const _ModeCard({
-    required this.icon,
-    required this.iconColor,
-    required this.iconBg,
-    required this.title,
-    required this.sub,
-    required this.onTap,
-    this.accent = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: accent ? xColor.withValues(alpha: 0.06) : surfaceColor,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-              color: accent ? xColor.withValues(alpha: 0.3) : lineColor),
-          boxShadow: [shadowSm],
-        ),
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: iconColor, size: 23),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14.5,
-                          color: inkColor)),
-                  const SizedBox(height: 2),
-                  Text(sub,
-                      style:
-                          TextStyle(fontSize: 12, color: ink2Color),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right_rounded, color: ink3Color, size: 20),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Section label ──────────────────────────────────────────────────────────────
-
-class _SectionLabel extends StatelessWidget {
-  final String label;
-  const _SectionLabel({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Text(label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.8,
-            color: ink3Color,
-          )),
-    );
-  }
-}
-
-// ── Avatar ────────────────────────────────────────────────────────────────────
-
-class _Avatar extends StatelessWidget {
-  final String label;
-  static const double size = 46;
-  const _Avatar({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: surface2Color,
-        borderRadius: BorderRadius.circular(size * 0.32),
-        border: Border.all(color: lineColor),
-      ),
-      child: Center(
-        child: Text(label,
-            style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: size * 0.4,
-                color: inkColor)),
-      ),
-    );
-  }
-}
-
-// ── Rank badge (simple) ────────────────────────────────────────────────────────
-
-class _UserRankBadge extends StatelessWidget {
-  final int score;
-  final String size;
-  const _UserRankBadge({required this.score, this.size = 'md'});
-
-  static const _tiers = [
-    {'label': 'Diamond', 'min': 7000, 'color': 0xFF5C8DF6},
-    {'label': 'Platinum', 'min': 3500, 'color': 0xFF42B8B0},
-    {'label': 'Gold', 'min': 1500, 'color': 0xFFE0A92B},
-    {'label': 'Silver', 'min': 500, 'color': 0xFF9AA3B2},
-    {'label': 'Bronze', 'min': 0, 'color': 0xFFB0794B},
-  ];
-
-  Map<String, dynamic> get _tier {
-    for (final t in _tiers) {
-      if (score >= (t['min'] as int)) return t;
-    }
-    return _tiers.last;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = _tier;
-    final col = Color(t['color'] as int);
-    final small = size == 'sm';
-    return Container(
-      padding: EdgeInsets.symmetric(
-          horizontal: small ? 9 : 11, vertical: small ? 4 : 6),
-      decoration: BoxDecoration(
-        color: col.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: small ? 6 : 7,
-            height: small ? 6 : 7,
-            decoration: BoxDecoration(
-                shape: BoxShape.circle, color: col),
-          ),
-          const SizedBox(width: 5),
-          Text(t['label'] as String,
-              style: TextStyle(
-                  color: col,
-                  fontWeight: FontWeight.w700,
-                  fontSize: small ? 11 : 12.5)),
-        ],
-      ),
-    );
-  }
-}
-
-// ── X / O decorative marks ────────────────────────────────────────────────────
-
-class _XMark extends StatelessWidget {
-  final double size;
-  final Color color;
-  const _XMark({required this.size, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-        size: Size(size, size), painter: _XPainter(color: color));
-  }
-}
-
-class _XPainter extends CustomPainter {
-  final Color color;
-  _XPainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = size.width * 0.12
-      ..strokeCap = StrokeCap.round;
-    final pad = size.width * 0.22;
-    canvas.drawLine(Offset(pad, pad), Offset(size.width - pad, size.height - pad), paint);
-    canvas.drawLine(Offset(size.width - pad, pad), Offset(pad, size.height - pad), paint);
-  }
-
-  @override
-  bool shouldRepaint(_XPainter old) => old.color != color;
-}
-
-class _OMark extends StatelessWidget {
-  final double size;
-  final Color color;
-  const _OMark({required this.size, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-        size: Size(size, size), painter: _OPainter(color: color));
-  }
-}
-
-class _OPainter extends CustomPainter {
-  final Color color;
-  _OPainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = size.width * 0.12
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    canvas.drawCircle(
-        Offset(size.width / 2, size.height / 2), size.width * 0.3, paint);
-  }
-
-  @override
-  bool shouldRepaint(_OPainter old) => old.color != color;
-}
-
-// ── Quick play bottom sheet ────────────────────────────────────────────────────
+// ─── FIXED: Quick Play Sheet ──────────────────────────────────────────────────
 
 class _QuickPlaySheet extends StatelessWidget {
   final VoidCallback onSinglePlayer;
@@ -1440,7 +1315,245 @@ class _SheetTile extends StatelessWidget {
   }
 }
 
-// ── Chip grid (kept for compatibility with dialogs) ───────────────────────────
+// ─── Mode card ────────────────────────────────────────────────────────────────
+
+class _ModeCard extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBg;
+  final String title;
+  final String sub;
+  final VoidCallback onTap;
+  final bool accent;
+
+  const _ModeCard({
+    required this.icon,
+    required this.iconColor,
+    required this.iconBg,
+    required this.title,
+    required this.sub,
+    required this.onTap,
+    this.accent = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: accent ? xColor.withValues(alpha: 0.06) : surfaceColor,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+              color: accent ? xColor.withValues(alpha: 0.3) : lineColor),
+          boxShadow: [shadowSm],
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: iconColor, size: 23),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14.5,
+                          color: inkColor)),
+                  const SizedBox(height: 2),
+                  Text(sub,
+                      style:
+                          TextStyle(fontSize: 12, color: ink2Color),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: ink3Color, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Section label ────────────────────────────────────────────────────────────
+
+class _SectionLabel extends StatelessWidget {
+  final String label;
+  const _SectionLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.8,
+            color: ink3Color,
+          )),
+    );
+  }
+}
+
+// ─── Avatar ───────────────────────────────────────────────────────────────────
+
+class _Avatar extends StatelessWidget {
+  final String label;
+  static const double size = 46;
+  const _Avatar({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: surface2Color,
+        borderRadius: BorderRadius.circular(size * 0.32),
+        border: Border.all(color: lineColor),
+      ),
+      child: Center(
+        child: Text(label,
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: size * 0.4,
+                color: inkColor)),
+      ),
+    );
+  }
+}
+
+// ─── Rank badge ──────────────────────────────────────────────────────────────
+
+class _UserRankBadge extends StatelessWidget {
+  final int score;
+  final String size;
+  const _UserRankBadge({required this.score, this.size = 'md'});
+
+  static const _tiers = [
+    {'label': 'Diamond', 'min': 7000, 'color': 0xFF5C8DF6},
+    {'label': 'Platinum', 'min': 3500, 'color': 0xFF42B8B0},
+    {'label': 'Gold', 'min': 1500, 'color': 0xFFE0A92B},
+    {'label': 'Silver', 'min': 500, 'color': 0xFF9AA3B2},
+    {'label': 'Bronze', 'min': 0, 'color': 0xFFB0794B},
+  ];
+
+  Map<String, dynamic> get _tier {
+    for (final t in _tiers) {
+      if (score >= (t['min'] as int)) return t;
+    }
+    return _tiers.last;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = _tier;
+    final col = Color(t['color'] as int);
+    final small = size == 'sm';
+    return Container(
+      padding: EdgeInsets.symmetric(
+          horizontal: small ? 9 : 11, vertical: small ? 4 : 6),
+      decoration: BoxDecoration(
+        color: col.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: small ? 6 : 7,
+            height: small ? 6 : 7,
+            decoration: BoxDecoration(
+                shape: BoxShape.circle, color: col),
+          ),
+          const SizedBox(width: 5),
+          Text(t['label'] as String,
+              style: TextStyle(
+                  color: col,
+                  fontWeight: FontWeight.w700,
+                  fontSize: small ? 11 : 12.5)),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── X / O decorative marks ─────────────────────────────────────────────────
+
+class _XMark extends StatelessWidget {
+  final double size;
+  final Color color;
+  const _XMark({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+        size: Size(size, size), painter: _XPainter(color: color));
+  }
+}
+
+class _XPainter extends CustomPainter {
+  final Color color;
+  _XPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = size.width * 0.12
+      ..strokeCap = StrokeCap.round;
+    final pad = size.width * 0.22;
+    canvas.drawLine(Offset(pad, pad), Offset(size.width - pad, size.height - pad), paint);
+    canvas.drawLine(Offset(size.width - pad, pad), Offset(pad, size.height - pad), paint);
+  }
+
+  @override
+  bool shouldRepaint(_XPainter old) => old.color != color;
+}
+
+class _OMark extends StatelessWidget {
+  final double size;
+  final Color color;
+  const _OMark({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+        size: Size(size, size), painter: _OPainter(color: color));
+  }
+}
+
+class _OPainter extends CustomPainter {
+  final Color color;
+  _OPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = size.width * 0.12
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawCircle(
+        Offset(size.width / 2, size.height / 2), size.width * 0.3, paint);
+  }
+
+  @override
+  bool shouldRepaint(_OPainter old) => old.color != color;
+}
 
 class ChipGrid extends StatefulWidget {
   final List list;

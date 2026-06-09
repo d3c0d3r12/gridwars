@@ -28,7 +28,7 @@ class _PassNPLayState extends State<PassNPLay> {
   Timer? _gameTimer;
   final _timerNotifier = ValueNotifier<int>(0);
 
-  // FIXED: Better state management
+  // State management
   String gameStatus = "started";
   Map buttons = {};
   String? currentMove;
@@ -110,12 +110,20 @@ class _PassNPLayState extends State<PassNPLay> {
     _stopTimer();
     music.play(losegame);
 
+    // FIXED: Correct winner on timeout
+    // Current player missed their turn, so opponent wins
     final winnerPlayer = (player == "X")
         ? widget.player2.toString()
         : widget.player1.toString();
 
     if (mounted) {
       Dialogue.winner(context, winnerPlayer, "", "", "", "");
+      // Navigate back after dialog closes
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      });
     }
   }
 
@@ -161,7 +169,8 @@ class _PassNPLayState extends State<PassNPLay> {
           _stopTimer();
 
           // FIXED: Correct winner assignment
-          // player "1" means Player 2 won, player "2" means Player 1 won
+          // player "2" means Player 1 (X) won
+          // player "1" means Player 2 (O) won
           final isPlayer1Winner = (winner == "2");
           final winnerName = isPlayer1Winner ? widget.player1 : widget.player2;
 
@@ -172,6 +181,12 @@ class _PassNPLayState extends State<PassNPLay> {
           }
 
           Dialogue.winner(context, winnerName, "", "", "", "");
+          // Navigate back after dialog closes
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted && Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
+          });
         }
         setState(() {});
         return;
@@ -207,6 +222,12 @@ class _PassNPLayState extends State<PassNPLay> {
           widget.player1Skin,
           widget.player2Skin,
         );
+        // Navigate back after tie dialog closes
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted && Navigator.canPop(context)) {
+            Navigator.pop(context);
+          }
+        });
       }
       setState(() {});
     }
@@ -259,9 +280,9 @@ class _PassNPLayState extends State<PassNPLay> {
         return Alert(
           title: Text(
             utils.getTranslated(context, "aleart"),
-            style: TextStyle(color: inkColor),
+            style: TextStyle(color: white),
           ),
-                                isMultipleAction: true,
+          isMultipleAction: true,
           defaultActionButtonName: utils.getTranslated(context, "ok"),
           onTapActionButton: () {},
           content: Text(
@@ -288,7 +309,7 @@ class _PassNPLayState extends State<PassNPLay> {
               style: ButtonStyle(backgroundColor: WidgetStateProperty.all(color)),
               onPressed: () {
                 music.play(click);
-                Navigator.pop(context);
+                if (mounted) Navigator.pop(context);
                 _isDialogShowing = false;
               },
               child: Text(
@@ -327,7 +348,7 @@ class _PassNPLayState extends State<PassNPLay> {
       child: Scaffold(
         body: Container(
           padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-          color: bgColor,
+          decoration: utils.gradBack(),
           child: Column(
             children: [
               // Header with timer and quit button
@@ -355,7 +376,7 @@ class _PassNPLayState extends State<PassNPLay> {
                                 child: Text(
                                   '$secs',
                                   style: TextStyle(
-                                    color: secs <= 10 ? Colors.red : inkColor,
+                                    color: secs <= 10 ? Colors.red : white,
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
                                   ),

@@ -21,7 +21,7 @@ class _RpsGameScreenState extends State<RpsGameScreen>
   bool _resultShown = false;
   bool _disposed = false;
   String _resultMsg = '';
-  bool _roundWon = false; // true=won, false=lost, null=draw
+  int? _roundResult; // 1=win, -1=loss, 0=draw
   StreamSubscription? _sub;
   bool _abandoned = false;
 
@@ -83,14 +83,13 @@ class _RpsGameScreenState extends State<RpsGameScreen>
       final myChoiceInState = st[_myKey] as String? ?? '';
       setState(() {
         _state = st;
-        // Sync local choice if state cleared it (new round)
         if (myChoiceInState.isEmpty) _myChoice = '';
       });
       _checkRound(st);
     });
 
-    // Start timer after first build
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startTimer());
+    // Start timer after build
+    _startTimer();
   }
 
   @override
@@ -103,10 +102,8 @@ class _RpsGameScreenState extends State<RpsGameScreen>
     super.dispose();
   }
 
-  // ── Timer ────────────────────────────────────────────────────────────────
-
   void _startTimer() {
-    if (_disposed || _gameOver) return;
+    if (_disposed || _gameOver || _myChoice.isNotEmpty) return;
     _stopTimer();
     setState(() {
       _timerSecs = _timerMax;
@@ -116,7 +113,6 @@ class _RpsGameScreenState extends State<RpsGameScreen>
       if (_timerSecs <= 1) {
         t.cancel();
         setState(() { _timerSecs = 0; });
-        // Auto-pick random if user hasn't picked
         if (_myChoice.isEmpty && !_gameOver) {
           _pick(_choices[Random().nextInt(_choices.length)]);
         }
@@ -129,10 +125,7 @@ class _RpsGameScreenState extends State<RpsGameScreen>
   void _stopTimer() {
     _countdownTimer?.cancel();
     _countdownTimer = null;
-    if (mounted) setState(() {});
   }
-
-  // ── Game logic ───────────────────────────────────────────────────────────
 
   void _abandonGame() async {
     if (_abandoned || _disposed) return;
@@ -143,17 +136,14 @@ class _RpsGameScreenState extends State<RpsGameScreen>
     await ArcadeService.endGame(widget.args.type, widget.args.gameId,
         widget.args.oppId, widget.args.entryFee);
     if (mounted && !_disposed) {
-      Navigator.of(context).popUntil((route) => route is PageRoute);
-      Navigator.of(context).pop();
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
   void _handleExit() {
     if (!mounted) return;
     if (_gameOver) {
-      // Game already ended — skip confirm, close any result dialog + game screen.
-      Navigator.of(context).popUntil((route) => route is PageRoute);
-      Navigator.of(context).pop();
+      Navigator.of(context).popUntil((route) => route.isFirst);
       return;
     }
     showLeaveConfirmDialog(context, _abandonGame);
@@ -171,7 +161,6 @@ class _RpsGameScreenState extends State<RpsGameScreen>
     final p1 = st[_p1Key] as String? ?? '';
     final p2 = st[_p2Key] as String? ?? '';
     if (p1.isEmpty || p2.isEmpty) {
-      // New round started — restart timer only if I haven't picked
       if (_myChoice.isEmpty && !_gameOver && !_disposed) {
         _startTimer();
       }
@@ -186,24 +175,23 @@ class _RpsGameScreenState extends State<RpsGameScreen>
     final round = st['round'] as int? ?? 1;
     final maxR  = st['maxRounds'] as int? ?? 5;
 
-    bool iWon;
+    // FIXED: Proper round result tracking
     String roundResult;
     if (p1 == p2) {
-      iWon = false;
-      roundResult = 'Draw — No points!';
+      _roundResult = 0; // Draw
+      roundResult = 'Draw! 🤝';
     } else if (_beats[p1] == p2) {
       p1Score++;
-      iWon = widget.args.isP1;
-      roundResult = widget.args.isP1 ? 'Round Win! 🎉' : 'Round Lost!';
+      _roundResult = widget.args.isP1 ? 1 : -1;
+      roundResult = widget.args.isP1 ? 'You Win! 🎉' : 'You Lose! 😔';
     } else {
       p2Score++;
-      iWon = !widget.args.isP1;
-      roundResult = widget.args.isP1 ? 'Round Lost!' : 'Round Win! 🎉';
+      _roundResult = widget.args.isP1 ? -1 : 1;
+      roundResult = widget.args.isP1 ? 'You Lose! 😔' : 'You Win! 🎉';
     }
 
     setState(() {
       _resultMsg = roundResult;
-      _roundWon = iWon;
     });
     _resultCtrl.forward(from: 0);
 
@@ -235,7 +223,11 @@ class _RpsGameScreenState extends State<RpsGameScreen>
         _showFinalResult(p1Score, p2Score);
       }
     } else {
-      setState(() { _myChoice = ''; _resultMsg = ''; });
+      setState(() { 
+        _myChoice = ''; 
+        _resultMsg = '';
+        _roundResult = null;
+      });
       await ArcadeService.updateState(widget.args.type, widget.args.gameId, {
         'p1Score': p1Score,
         'p2Score': p2Score,
@@ -243,6 +235,7 @@ class _RpsGameScreenState extends State<RpsGameScreen>
         'p1Choice': '',
         'p2Choice': '',
       });
+      _startTimer();
     }
   }
 
@@ -258,6 +251,7 @@ class _RpsGameScreenState extends State<RpsGameScreen>
     return ((s.snapshot.value as Map)['p2'] as String?) ?? '';
   }
 
+  // FIXED: Better final result dialog
   void _showFinalResult(int p1Score, int p2Score) {
     final myScore  = widget.args.isP1 ? p1Score : p2Score;
     final oppScore = widget.args.isP1 ? p2Score : p1Score;
@@ -267,7 +261,7 @@ class _RpsGameScreenState extends State<RpsGameScreen>
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => Dialog(
+      builder: (ctx) => Dialog(
         backgroundColor: surfaceColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
         child: Padding(
@@ -328,8 +322,13 @@ class _RpsGameScreenState extends State<RpsGameScreen>
                 elevation: 0,
               ),
               onPressed: () {
-                if (Navigator.canPop(context)) Navigator.pop(context);
-                if (Navigator.canPop(context)) Navigator.pop(context);
+                // FIXED: Proper navigation back
+                Navigator.of(ctx).pop(); // Close dialog
+                Future.delayed(const Duration(milliseconds: 100), () {
+                  if (mounted && Navigator.canPop(context)) {
+                    Navigator.of(context).pop(); // Close game screen
+                  }
+                });
               },
               child: const Text('Back to Arcade', style: TextStyle(fontWeight: FontWeight.w700)),
             ),
@@ -350,8 +349,6 @@ class _RpsGameScreenState extends State<RpsGameScreen>
     ]);
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     final round    = (_state['round'] as int? ?? 1).clamp(1, 999);
@@ -359,7 +356,6 @@ class _RpsGameScreenState extends State<RpsGameScreen>
     final myScore  = (widget.args.isP1 ? _state['p1Score'] : _state['p2Score']) as int? ?? 0;
     final oppScore = (widget.args.isP1 ? _state['p2Score'] : _state['p1Score']) as int? ?? 0;
     final oppPicked = (_state[_oppKey] as String? ?? '').isNotEmpty;
-    final timerFrac = _timerSecs / _timerMax;
     final timerDanger = _timerSecs <= 3;
 
     return PopScope(
@@ -372,11 +368,10 @@ class _RpsGameScreenState extends State<RpsGameScreen>
         body: SafeArea(
           child: Column(children: [
 
-            // ── Top bar ───────────────────────────────────────────────────
+            // Top bar
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Row(children: [
-                // Exit button
                 GestureDetector(
                   onTap: _handleExit,
                   child: Container(
@@ -389,10 +384,7 @@ class _RpsGameScreenState extends State<RpsGameScreen>
                     child: Icon(Icons.close_rounded, color: ink2Color, size: 18),
                   ),
                 ),
-
                 const Spacer(),
-
-                // Title + round
                 Column(children: [
                   Text('ROCK PAPER SCISSORS',
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
@@ -407,10 +399,7 @@ class _RpsGameScreenState extends State<RpsGameScreen>
                         style: TextStyle(fontSize: 11, color: xColor, fontWeight: FontWeight.w700)),
                   ),
                 ]),
-
                 const Spacer(),
-
-                // Scores
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
@@ -433,7 +422,7 @@ class _RpsGameScreenState extends State<RpsGameScreen>
 
             const SizedBox(height: 12),
 
-            // ── Round progress dots ───────────────────────────────────────
+            // Round progress dots (FIXED)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
@@ -443,8 +432,6 @@ class _RpsGameScreenState extends State<RpsGameScreen>
                   Color dotColor;
                   double dotSize;
                   if (roundIdx < round) {
-                    // Played round — color by winner
-                    // We approximate from score: can't know per-round without extra state
                     dotColor = lineColor;
                     dotSize = 8;
                   } else if (roundIdx == round) {
@@ -472,7 +459,7 @@ class _RpsGameScreenState extends State<RpsGameScreen>
 
             const SizedBox(height: 16),
 
-            // ── Timer ring ────────────────────────────────────────────────
+            // Timer ring
             if (!_gameOver && _myChoice.isEmpty)
               AnimatedBuilder(
                 animation: _pulseCtrl,
@@ -484,7 +471,7 @@ class _RpsGameScreenState extends State<RpsGameScreen>
                   SizedBox(
                     width: 64, height: 64,
                     child: CircularProgressIndicator(
-                      value: timerFrac,
+                      value: _timerSecs / _timerMax,
                       strokeWidth: 5,
                       backgroundColor: lineColor,
                       valueColor: AlwaysStoppedAnimation(
@@ -501,7 +488,7 @@ class _RpsGameScreenState extends State<RpsGameScreen>
                 ]),
               ),
 
-            // ── Result flash ──────────────────────────────────────────────
+            // Result flash
             if (_resultMsg.isNotEmpty)
               ScaleTransition(
                 scale: _resultAnim,
@@ -509,15 +496,20 @@ class _RpsGameScreenState extends State<RpsGameScreen>
                   margin: const EdgeInsets.fromLTRB(20, 4, 20, 0),
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   decoration: BoxDecoration(
-                    color: _roundWon ? goodColor.withValues(alpha: 0.12) : red.withValues(alpha: 0.10),
+                    color: _roundResult == 1 ? goodColor.withValues(alpha: 0.12) 
+                        : _roundResult == -1 ? red.withValues(alpha: 0.10)
+                        : ink2Color.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: _roundWon ? goodColor.withValues(alpha: 0.45) : red.withValues(alpha: 0.35),
+                      color: _roundResult == 1 ? goodColor.withValues(alpha: 0.45) 
+                          : _roundResult == -1 ? red.withValues(alpha: 0.35)
+                          : ink3Color.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Text(_resultMsg,
                       style: TextStyle(
-                        color: _roundWon ? goodColor : (_resultMsg.contains('Draw') ? ink2Color : red),
+                        color: _roundResult == 1 ? goodColor 
+                            : _roundResult == -1 ? red : ink3Color,
                         fontWeight: FontWeight.w700, fontSize: 15,
                       ), textAlign: TextAlign.center),
                 ),
@@ -525,11 +517,10 @@ class _RpsGameScreenState extends State<RpsGameScreen>
 
             const SizedBox(height: 12),
 
-            // ── Player VS player cards ────────────────────────────────────
+            // Player cards
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(children: [
-                // My card
                 Expanded(child: _PlayerCard(
                   name: 'You',
                   choice: _myChoice,
@@ -538,7 +529,6 @@ class _RpsGameScreenState extends State<RpsGameScreen>
                   color: xColor,
                   revealChoice: true,
                 )),
-
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: Column(children: [
@@ -546,8 +536,6 @@ class _RpsGameScreenState extends State<RpsGameScreen>
                         fontSize: 16, fontWeight: FontWeight.w900, color: ink3Color)),
                   ]),
                 ),
-
-                // Opponent card
                 Expanded(child: _PlayerCard(
                   name: widget.args.oppName,
                   choice: _state[_oppKey] as String? ?? '',
@@ -556,7 +544,6 @@ class _RpsGameScreenState extends State<RpsGameScreen>
                       : null,
                   hasPicked: oppPicked,
                   color: oColor,
-                  // Only reveal opponent's choice after both have picked
                   revealChoice: oppPicked && _myChoice.isNotEmpty,
                 )),
               ]),
@@ -564,7 +551,7 @@ class _RpsGameScreenState extends State<RpsGameScreen>
 
             const Spacer(),
 
-            // ── Pick buttons ──────────────────────────────────────────────
+            // Pick buttons
             if (_myChoice.isEmpty && !_gameOver) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -607,7 +594,6 @@ class _RpsGameScreenState extends State<RpsGameScreen>
               ),
             ],
 
-            // Waiting for opponent (after my pick)
             if (_myChoice.isNotEmpty && !oppPicked && !_gameOver && _resultMsg.isEmpty) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
@@ -632,8 +618,7 @@ class _RpsGameScreenState extends State<RpsGameScreen>
   }
 }
 
-// ── Player Card Widget ─────────────────────────────────────────────────────────
-
+// Player Card Widget
 class _PlayerCard extends StatelessWidget {
   final String name;
   final String choice;
@@ -668,11 +653,9 @@ class _PlayerCard extends StatelessWidget {
             : [shadowSm],
       ),
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        // Emoji or waiting indicator
         if (revealChoice && hasPickedEmoji != null)
           Text(hasPickedEmoji!, style: const TextStyle(fontSize: 40))
         else if (hasPicked && !revealChoice)
-          // Opponent picked but we don't show what yet
           Container(
             width: 44, height: 44,
             decoration: BoxDecoration(
@@ -690,18 +673,13 @@ class _PlayerCard extends StatelessWidget {
             ),
             child: Icon(Icons.help_outline_rounded, color: ink3Color, size: 24),
           ),
-
         const SizedBox(height: 8),
-
-        // Name
         Text(name,
             style: TextStyle(
               fontSize: 12, fontWeight: FontWeight.w700,
               color: hasPicked ? color : ink2Color,
             ),
             maxLines: 1, overflow: TextOverflow.ellipsis),
-
-        // Status label
         const SizedBox(height: 2),
         Text(
           hasPicked ? (revealChoice ? '' : 'Picked ✓') : 'Waiting…',

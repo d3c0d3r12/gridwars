@@ -68,16 +68,14 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
     _statusSub?.cancel();
     await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
     if (mounted && !_disposed) {
-      Navigator.of(context).popUntil((route) => route is PageRoute);
-      Navigator.of(context).pop();
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
   void _handleExit() {
     if (!mounted) return;
     if (_gameOver) {
-      Navigator.of(context).popUntil((route) => route is PageRoute);
-      Navigator.of(context).pop();
+      Navigator.of(context).popUntil((route) => route.isFirst);
       return;
     }
     showLeaveConfirmDialog(context, _abandonGame);
@@ -85,15 +83,13 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
 
   bool get _myTurn => _turn == _myNum && !_gameOver;
 
-  // FIXED: Correct win detection
   void _checkGameOver(List<int> board, int turn) {
     if (_gameOver) return;
-    final myPieces  = board.where((c) => c == _myNum || c == _myNum + 2).length;
-    // BUG WAS HERE: the Set literal `{if (cond) boolExpr}` created Set<bool>,
-    // so `.contains(intC)` always returned false. Fixed with correct int comparison.
-    final oppNum      = _myNum == 1 ? 2 : 1;
-    final oppKingNum  = _myNum == 1 ? 4 : 3;
-    final oppPieces   = board.where((c) => c == oppNum || c == oppKingNum).length;
+    
+    final myPieces = board.where((c) => c == _myNum || c == _myNum + 2).length;
+    final oppNum = _myNum == 1 ? 2 : 1;
+    final oppKingNum = _myNum == 1 ? 4 : 3;
+    final oppPieces = board.where((c) => c == oppNum || c == oppKingNum).length;
 
     // If I have no pieces, I lose
     if (myPieces == 0) {
@@ -115,7 +111,7 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
     bool hasMoves = false;
     for (int i = 0; i < 64; i++) {
       final piece = board[i];
-      final isMyPiece = piece == _turn || piece == _turn + 2;
+      final isMyPiece = piece == turn || piece == turn + 2;
       if (isMyPiece && _getMoves(i, board).isNotEmpty) {
         hasMoves = true;
         break;
@@ -123,8 +119,7 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
     }
 
     if (!hasMoves) {
-      // No moves available - current player loses
-      if (_turn == _myNum) {
+      if (turn == _myNum) {
         _gameOver = true;
         _showResult(false);
         ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
@@ -222,16 +217,40 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
   }
 
   void _showResult(bool won) {
-    showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
-      backgroundColor: surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
-      title: Text(won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      content: Text(won ? '+${widget.args.entryFee * 2} coins!' : 'Better luck next time', style: TextStyle(color: xColor), textAlign: TextAlign.center),
-      actions: [TextButton(onPressed: () {
-        if (Navigator.canPop(context)) Navigator.pop(context);
-        if (Navigator.canPop(context)) Navigator.pop(context);
-      }, child: Text('Back', style: TextStyle(color: xColor)))],
-    ));
+    showDialog(
+      context: context, 
+      barrierDismissible: false, 
+      builder: (_) => AlertDialog(
+        backgroundColor: surfaceColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20), 
+          side: BorderSide(color: xColor.withValues(alpha: 0.4))
+        ),
+        title: Text(
+          won ? '🏆 You Win!' : '😔 You Lose', 
+          style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), 
+          textAlign: TextAlign.center
+        ),
+        content: Text(
+          won ? '+${widget.args.entryFee * 2} coins!' : 'Better luck next time', 
+          style: TextStyle(color: xColor), 
+          textAlign: TextAlign.center
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              if (Navigator.canPop(context)) Navigator.pop(context);
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted && Navigator.canPop(context)) {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                }
+              });
+            }, 
+            child: Text('Back', style: TextStyle(color: xColor, fontWeight: FontWeight.w600))
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -240,51 +259,90 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
     final oppColor = widget.args.isP1 ? const Color(0xFFFFECB3) : const Color(0xFFE53935);
 
     return PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) { if (!didPop && !_disposed) _handleExit(); },
-        child: Scaffold(
-          body: Container(
-            color: bgColor,
-            child: SafeArea(child: Column(children: [
-              gameHeader(context, 'CHECKERS', _myTurn ? 'Your Turn' : "${widget.args.oppName}'s Turn", 0, 0, onExit: _handleExit),
-              const SizedBox(height: 6),
-              if (_myTurn && _selected == -1) gamePill('Tap your piece to select, then tap to move', myColor),
-              if (_myTurn && _selected != -1) gamePill('Tap destination (highlighted)', secondarySelectedColor),
-              if (!_myTurn && !_gameOver) gamePill("${widget.args.oppName} is thinking…", inkColor.withValues(alpha: 0.5)),
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) { 
+        if (!didPop && !_disposed) _handleExit(); 
+      },
+      child: Scaffold(
+        backgroundColor: bgColor,
+        body: SafeArea(
+          child: Column(children: [
+            gameHeader(
+              context, 
+              'CHECKERS', 
+              _myTurn ? 'Your Turn' : "${widget.args.oppName}'s Turn", 
+              0, 0, 
+              onExit: _handleExit
+            ),
+            const SizedBox(height: 6),
+            
+            if (_myTurn && _selected == -1) 
+              gamePill('Tap your piece to select, then tap to move', myColor),
+            if (_myTurn && _selected != -1) 
+              gamePill('Tap destination (highlighted)', secondarySelectedColor),
+            if (!_myTurn && !_gameOver) 
+              gamePill("${widget.args.oppName} is thinking…", inkColor.withValues(alpha: 0.5)),
 
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: AspectRatio(aspectRatio: 1,
-                    child: GestureDetector(
-                      onTapUp: (det) {
-                        final size = MediaQuery.of(context).size.width - 24;
-                        final cs = size / 8;
-                        final col = (det.localPosition.dx / cs).floor().clamp(0, 7);
-                        final rawRow = (det.localPosition.dy / cs).floor().clamp(0, 7);
-                        final row = widget.args.isP1 ? rawRow : 7 - rawRow;
-                        _onTap(row * 8 + col);
-                      },
-                      child: CustomPaint(
-                        painter: _CheckersPainter(_board, _selected, _validMoves, widget.args.isP1, myColor, oppColor),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: GestureDetector(
+                    onTapUp: (det) {
+                      final size = MediaQuery.of(context).size.width - 24;
+                      final cs = size / 8;
+                      final col = (det.localPosition.dx / cs).floor().clamp(0, 7);
+                      final rawRow = (det.localPosition.dy / cs).floor().clamp(0, 7);
+                      final row = widget.args.isP1 ? rawRow : 7 - rawRow;
+                      _onTap(row * 8 + col);
+                    },
+                    child: CustomPaint(
+                      painter: _CheckersPainter(
+                        _board, 
+                        _selected, 
+                        _validMoves, 
+                        widget.args.isP1, 
+                        myColor, 
+                        oppColor
                       ),
                     ),
                   ),
                 ),
               ),
+            ),
 
-              Padding(padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    _dot(myColor), const SizedBox(width: 4), Text('You', style: TextStyle(color: inkColor, fontSize: 12)),
-                    const SizedBox(width: 20),
-                    _dot(oppColor), const SizedBox(width: 4), Text(widget.args.oppName, style: TextStyle(color: inkColor, fontSize: 12)),
-                  ])),
-            ])),
-          ),
-        ));
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center, 
+                children: [
+                  _dot(myColor), 
+                  const SizedBox(width: 4), 
+                  Text('You', style: TextStyle(color: inkColor, fontSize: 12, fontWeight: FontWeight.w500)),
+                  const SizedBox(width: 20),
+                  _dot(oppColor), 
+                  const SizedBox(width: 4), 
+                  Text(widget.args.oppName, style: TextStyle(color: inkColor, fontSize: 12, fontWeight: FontWeight.w500)),
+                ]
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 
-  Widget _dot(Color c) => Container(width: 14, height: 14, decoration: BoxDecoration(shape: BoxShape.circle, color: c));
+  Widget _dot(Color c) => Container(
+    width: 16, 
+    height: 16, 
+    decoration: BoxDecoration(
+      shape: BoxShape.circle, 
+      color: c,
+      border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1),
+      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 2)],
+    ),
+  );
 }
 
 class _CheckersPainter extends CustomPainter {
@@ -293,33 +351,100 @@ class _CheckersPainter extends CustomPainter {
   final List<int> validMoves;
   final bool isP1;
   final Color myColor, oppColor;
-  _CheckersPainter(this.board, this.selected, this.validMoves, this.isP1, this.myColor, this.oppColor);
+  
+  _CheckersPainter(
+    this.board, 
+    this.selected, 
+    this.validMoves, 
+    this.isP1, 
+    this.myColor, 
+    this.oppColor
+  );
 
   @override
   void paint(Canvas canvas, Size size) {
     final cs = size.width / 8;
+    
     for (int r = 0; r < 8; r++) {
       for (int c = 0; c < 8; c++) {
         final drawR = isP1 ? r : 7 - r;
         final isDark = (r + c) % 2 == 1;
         final idx = r * 8 + c;
-        canvas.drawRect(Rect.fromLTWH(c * cs, drawR * cs, cs, cs),
-            Paint()..color = isDark ? const Color(0xFF795548) : const Color(0xFFD7CCC8));
-        if (idx == selected) canvas.drawRect(Rect.fromLTWH(c*cs, drawR*cs, cs, cs), Paint()..color = Colors.yellow.withValues(alpha: 0.35));
-        if (validMoves.contains(idx)) canvas.drawRect(Rect.fromLTWH(c*cs, drawR*cs, cs, cs), Paint()..color = Colors.green.withValues(alpha: 0.35));
+        
+        // Draw square
+        final rect = Rect.fromLTWH(c * cs, drawR * cs, cs, cs);
+        canvas.drawRect(
+          rect,
+          Paint()..color = isDark 
+              ? const Color(0xFF5D4037)  // Darker brown for dark squares
+              : const Color(0xFFEFEBE9), // Lighter for light squares
+        );
+        
+        // Highlight selected piece
+        if (idx == selected) {
+          canvas.drawRect(
+            rect, 
+            Paint()..color = Colors.amber.withValues(alpha: 0.45)
+          );
+        }
+        
+        // Highlight valid moves
+        if (validMoves.contains(idx)) {
+          canvas.drawRect(
+            rect, 
+            Paint()..color = Colors.green.withValues(alpha: 0.35)
+          );
+        }
+        
+        // Draw piece
         if (board[idx] != 0) {
           final piece = board[idx];
-          final color = (isP1 ? piece == 1 || piece == 3 : piece == 2 || piece == 4) ? myColor : oppColor;
-          final cx = c * cs + cs / 2, cy = drawR * cs + cs / 2;
-          canvas.drawCircle(Offset(cx, cy), cs * 0.38, Paint()..color = color);
-          canvas.drawCircle(Offset(cx, cy), cs * 0.38, Paint()..color = Colors.black..style = PaintingStyle.stroke..strokeWidth = 1.5);
+          final isMyPiece = (isP1 && (piece == 1 || piece == 3)) || (!isP1 && (piece == 2 || piece == 4));
+          final color = isMyPiece ? myColor : oppColor;
+          final cx = c * cs + cs / 2;
+          final cy = drawR * cs + cs / 2;
+          final radius = cs * 0.36;
+          
+          // Piece shadow
+          canvas.drawCircle(
+            Offset(cx + 1, cy + 1), 
+            radius, 
+            Paint()..color = Colors.black.withValues(alpha: 0.2)
+          );
+          
+          // Piece body
+          canvas.drawCircle(
+            Offset(cx, cy), 
+            radius, 
+            Paint()..color = color
+          );
+          
+          // Piece border
+          canvas.drawCircle(
+            Offset(cx, cy), 
+            radius, 
+            Paint()..color = Colors.black.withValues(alpha: 0.4)..style = PaintingStyle.stroke..strokeWidth = 1.5
+          );
+          
+          // King crown
           if (piece == 3 || piece == 4) {
-            canvas.drawCircle(Offset(cx, cy), cs * 0.18, Paint()..color = Colors.amber);
+            final crownRadius = radius * 0.45;
+            canvas.drawCircle(
+              Offset(cx, cy), 
+              crownRadius, 
+              Paint()..color = Colors.amber
+            );
+            canvas.drawCircle(
+              Offset(cx, cy), 
+              crownRadius, 
+              Paint()..color = Colors.black.withValues(alpha: 0.3)..style = PaintingStyle.stroke..strokeWidth = 1
+            );
           }
         }
       }
     }
   }
+  
   @override
   bool shouldRepaint(covariant _CheckersPainter old) => true;
 }
