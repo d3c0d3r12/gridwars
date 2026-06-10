@@ -35,7 +35,7 @@ class NotificationService {
   bool _reqPrimed = false, _chalPrimed = false;
   final Set<String> _knownReq = {};
   final Set<String> _knownChal = {};
-
+  final Set<String> _knownUnread = {};
   // Banner sink — set by the home screen so we can show an in-app message.
   void Function(String message)? onBanner;
 

@@ -44,7 +44,7 @@ final String losegame = "wingame.mp3";
 final String dice = "click.mp3";
 final String backMusic = "music.mp3";
 
-const String appName = "Chilling Zone";
+const String appName = "Chill Zone";
 
 final guestProfilePic =
     "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
@@ -74,6 +74,19 @@ final List noOfRoundDigit = [1, 3, 5, 7];
 
 final countdowntime = 60;
 
+// ── Brain Tricks (puzzle game) ───────────────────────────────────────────────
+// "Bulbs" are the hint currency (separate from coins). Mirrors the lightbulb
+// x10 / x50 economy in the reference screenshots.
+const int kHintCost = 10; // bulbs to reveal a level's clue
+const int kSkipCost = 50; // bulbs to skip a level (reveals the solution)
+const int kAdBulbReward = 5; // bulbs granted per rewarded video ad
+const int kStartBulbs = 30; // starting balance for new players
+const int kSolveBulbReward = 2; // small bulb reward for solving a level
+
+// Owner / developer account — gets unlimited coins + bulbs automatically.
+const String ownerEmail = 'lakshaymadaan376@gmail.com';
+const int kOwnerCoins = 9999999;
+
 //--Add custom default images to images/ folder
 final defaultXskin = "cross_skin";
 
@@ -101,7 +114,7 @@ final String termText =
     "<p></p><h2><b>Terms and conditions</b></h2>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Fusce aliquet vulputate tincidunt. Etiam pharetra auctor massa in aliquet. Curabitur a elit ut mauris ullamcorper pulvinar. Phasellus maximus tellus dui, id iaculis lectus fermentum nec. Aliquam odio erat, porttitor vel luctus id, sollicitudin non tortor. Vestibulum neque est, semper vel dui eu, varius aliquam ante. Donec mollis magna sed metus vestibulum consequat. Ut aliquam vulputate ligula, non cursus nibh gravida vitae. Phasellus tellus tellus, accumsan eget tortor laoreet, molestie mollis nisl.<br><br> Donec molestie semper nibh in efficitur. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Suspendisse dignissim, ex ac iaculis pulvinar, sem nisi scelerisque justo, pulvinar pellentesque ex mi bibendum urna. Quisque ac commodo justo. Integer ut dignissim lectus. Donec a elementum dolor. Vivamus eu nunc vitae mi iaculis imperdiet.<br><br>Ut ullamcorper risus leo, sit amet dictum magna consequat id. Cras eros leo, ullamcorper a vehicula sed, suscipit nec mi. Donec facilisis, urna eu placerat condimentum, nisi quam tincidunt ex, ac auctor nisi metus vel tellus. Curabitur aliquam felis ut ex facilisis eleifend. Mauris dapibus consectetur eros, id venenatis risus pretium eget. Proin sit amet egestas odio. Vivamus interdum, enim nec egestas vulputate, purus dui convallis velit, eu elementum massa nibh at nulla. Morbi ullamcorper accumsan ipsum, id pulvinar purus ultrices vel. In vehicula ultrices diam sit amet dapibus. Integer arcu diam, luctus nec urna eu, iaculis tempor arcu. Sed sit amet pulvinar arcu, eget consequat ante. Curabitur nunc ante, venenatis at tellus eu, euismod vulputate lectus. Vivamus finibus arcu nulla.<br><br>Proin mollis ullamcorper nibh et viverra. Nullam iaculis leo et erat commodo pretium. Phasellus ut sapien vel dui mattis vulputate. Duis non volutpat elit. Nulla vitae mi metus. Donec euismod vulputate risus, ac maximus erat maximus quis. Nullam molestie eget orci ac accumsan. Proin tortor lectus, ultrices id tortor vel, mollis faucibus enim. Proin augue ante, mollis id libero eget, ultrices auctor augue. Nam lacinia dapibus dui, nec bibendum lacus pharetra sit amet. <br><br>Maecenas ut diam urna. Sed consectetur ipsum nec tempus facilisis. Proin gravida est lectus, vel sagittis lorem porta non. Maecenas id tempus ex. Integer ullamcorper, lacus sed interdum imperdiet, purus tellus dapibus ipsum, sed auctor dui dolor at lorem.<br><br>Sed non placerat erat. Nullam diam purus, cursus vitae sapien et, ultrices molestie eros. Aliquam eleifend sem libero, et facilisis tellus sagittis id. Aliquam faucibus, enim ut fermentum aliquam, arcu nunc mollis justo, in pulvinar ante nisl nec ex. Morbi vel eros non tellus tincidunt sagittis. Sed massa felis, finibus non placerat a, pharetra sit amet massa. Proin ornare magna vitae risus accumsan, vel sagittis nisl finibus. Sed sit amet finibus magna. Proin fringilla risus sit amet velit auctor, sit amet faucibus tellus scelerisque.</p>";
 
 final String aboutText =
-    "<p>Welcome to <b>Chilling Zone</b><br><br>The ultimate X vs O battle game!<br><br>Challenge your friends or play against AI in this classic strategy game — reimagined.<br><br>Game On. Chill On.</p>";
+    "<p>Welcome to <b>Chill Zone</b><br><br>The ultimate X vs O battle game!<br><br>Challenge your friends or play against AI in this classic strategy game — reimagined.<br><br>Game On. Chill On.</p>";
 
 final String contactText =
     "<h2><strong>Contact Us</strong></h2> <p>For any queries, feedback or support feel free to reach out to us:</p> <p>&nbsp;</p><p>Email <a href=mailto:support@xobattle.game>support@xobattle.game</a></p>";

@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../functions/arcade_service.dart';
+import '../../functions/arcade_ai.dart';
 import '../../helpers/color.dart';
 import '../../screens/arcade_lobby.dart';
 import 'game_widgets.dart';
@@ -23,7 +25,13 @@ class _RpsGameScreenState extends State<RpsGameScreen>
   String _resultMsg = '';
   bool _roundWon = false; // true=won, false=lost, null=draw
   StreamSubscription? _sub;
+  StreamSubscription? _presenceSub;
+  Timer? _oppGoneTimer;
+  bool _oppSeen = false;
   bool _abandoned = false;
+  final String _myUid = FirebaseAuth.instance.currentUser!.uid;
+  bool get _vsAi => widget.args.vsAi;
+  final List<String> _humanHistory = []; // for the bot's prediction (vs-AI)
 
   // Timer
   static const _timerMax = 10;
@@ -63,22 +71,25 @@ class _RpsGameScreenState extends State<RpsGameScreen>
     _resultCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
     _resultAnim = CurvedAnimation(parent: _resultCtrl, curve: Curves.elasticOut);
 
+    // Local vs-Computer practice: no Firebase. Seed state and play locally.
+    if (_vsAi) {
+      _state = {'round': 1, 'p1Choice': '', 'p2Choice': '', 'p1Score': 0, 'p2Score': 0, 'maxRounds': 5};
+      WidgetsBinding.instance.addPostFrameCallback((_) => _startTimer());
+      return;
+    }
+
     _sub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
         .onValue
         .listen((ev) {
       if (_disposed || !mounted || ev.snapshot.value == null) return;
       final data = Map<String, dynamic>.from(ev.snapshot.value as Map);
       if (data['status'] == 'finished' || data['status'] == 'cancelled') {
-        if (!_gameOver && !_abandoned && mounted && !_disposed) {
-          _stopTimer();
-          setState(() => _gameOver = true);
-          if (!_resultShown) {
-            _resultShown = true;
-            Future.delayed(Duration.zero, () => showOpponentLeftDialog(context));
-          }
-        }
+        // Single source of truth: show the real result from the winner uid
+        // (works for normal end AND opponent-abandon, with no race).
+        if (!_abandoned) _finishFromWinner(data['winner']?.toString());
         return;
       }
+      _watchOpponent(data);
       final st = Map<String, dynamic>.from(data['state'] as Map);
       final myChoiceInState = st[_myKey] as String? ?? '';
       setState(() {
@@ -88,18 +99,44 @@ class _RpsGameScreenState extends State<RpsGameScreen>
       });
       _checkRound(st);
     });
+    _presenceSub = ArcadeService.keepPresence(widget.args.type, widget.args.gameId);
 
     // Start timer after first build
     WidgetsBinding.instance.addPostFrameCallback((_) => _startTimer());
+  }
+
+  // Opponent-disconnect watchdog. Arms only after we've seen the opponent
+  // present (so a presence-write failure can never cause a false win). Covers
+  // the case where the opponent leaves mid-round and never makes a choice.
+  void _watchOpponent(Map<String, dynamic> data) {
+    final presence = data['presence'];
+    final oppHere  = presence is Map && presence[widget.args.oppId] == true;
+    if (oppHere) _oppSeen = true;
+    if (_oppSeen && !oppHere && !_gameOver && !_abandoned) {
+      _oppGoneTimer ??= Timer(const Duration(seconds: 8), () {
+        if (_gameOver || _disposed || !mounted) return;
+        ArcadeService.endGame(widget.args.type, widget.args.gameId, _myUid, widget.args.entryFee);
+        _finishFromWinner(_myUid);
+      });
+    } else {
+      _oppGoneTimer?.cancel();
+      _oppGoneTimer = null;
+    }
   }
 
   @override
   void dispose() {
     _disposed = true;
     _stopTimer();
+    _oppGoneTimer?.cancel();
     _pulseCtrl.dispose();
     _resultCtrl.dispose();
     _sub?.cancel();
+    _presenceSub?.cancel();
+    if (!_vsAi) {
+      ArcadeService.goOffline(widget.args.type, widget.args.gameId);
+      if (_resultShown) ArcadeService.cleanup(widget.args.type, widget.args.gameId);
+    }
     super.dispose();
   }
 
@@ -140,8 +177,10 @@ class _RpsGameScreenState extends State<RpsGameScreen>
     _stopTimer();
     setState(() => _gameOver = true);
     _sub?.cancel();
-    await ArcadeService.endGame(widget.args.type, widget.args.gameId,
-        widget.args.oppId, widget.args.entryFee);
+    if (!_vsAi) {
+      await ArcadeService.endGame(widget.args.type, widget.args.gameId,
+          widget.args.oppId, widget.args.entryFee);
+    }
     if (mounted && !_disposed) {
       Navigator.of(context).popUntil((route) => route is PageRoute);
       Navigator.of(context).pop();
@@ -163,6 +202,19 @@ class _RpsGameScreenState extends State<RpsGameScreen>
     if (_myChoice.isNotEmpty || _gameOver || _disposed) return;
     _stopTimer();
     setState(() => _myChoice = choice);
+
+    if (_vsAi) {
+      // Human is P1. Bot picks (using human's history), then resolve locally.
+      _humanHistory.add(choice);
+      final botChoice = RpsAi.pick(_humanHistory, widget.args.aiLevel);
+      setState(() {
+        _state[_p1Key] = choice;
+        _state[_p2Key] = botChoice;
+      });
+      _checkRound(Map.from(_state));
+      return;
+    }
+
     await ArcadeService.updateState(
         widget.args.type, widget.args.gameId, {_myKey: choice});
   }
@@ -215,10 +267,24 @@ class _RpsGameScreenState extends State<RpsGameScreen>
 
     if (gameOver) {
       String? winner;
-      if (p1Score > p2Score) winner = await _getP1Id();
-      else if (p2Score > p1Score) winner = await _getP2Id();
+      if (_vsAi) {
+        winner = p1Score > p2Score ? _myUid : (p2Score > p1Score ? widget.args.oppId : null);
+      } else if (p1Score > p2Score) {
+        winner = await _getP1Id();
+      } else if (p2Score > p1Score) {
+        winner = await _getP2Id();
+      }
 
       setState(() { _gameOver = true; _resultMsg = ''; });
+
+      if (_vsAi) {
+        setState(() {
+          _state['p1Score'] = p1Score;
+          _state['p2Score'] = p2Score;
+        });
+        _finishFromWinner(winner ?? 'draw');
+        return;
+      }
 
       await ArcadeService.updateState(widget.args.type, widget.args.gameId, {
         'p1Score': p1Score,
@@ -230,12 +296,20 @@ class _RpsGameScreenState extends State<RpsGameScreen>
       await ArcadeService.endGame(
           widget.args.type, widget.args.gameId, winner, widget.args.entryFee);
 
-      if (mounted && !_disposed && !_resultShown) {
-        _resultShown = true;
-        _showFinalResult(p1Score, p2Score);
-      }
+      _finishFromWinner(winner ?? 'draw');
     } else {
       setState(() { _myChoice = ''; _resultMsg = ''; });
+      if (_vsAi) {
+        setState(() {
+          _state['p1Score'] = p1Score;
+          _state['p2Score'] = p2Score;
+          _state['round'] = round + 1;
+          _state[_p1Key] = '';
+          _state[_p2Key] = '';
+        });
+        _startTimer();
+        return;
+      }
       await ArcadeService.updateState(widget.args.type, widget.args.gameId, {
         'p1Score': p1Score,
         'p2Score': p2Score,
@@ -258,11 +332,31 @@ class _RpsGameScreenState extends State<RpsGameScreen>
     return ((s.snapshot.value as Map)['p2'] as String?) ?? '';
   }
 
-  void _showFinalResult(int p1Score, int p2Score) {
+  // Idempotent finish from the authoritative winner uid (handles normal end
+  // and opponent-abandon identically). Falls back to score comparison only if
+  // the winner field is somehow absent.
+  void _finishFromWinner(String? winner) {
+    if (_resultShown || _disposed || !mounted) return;
+    _resultShown = true;
+    _stopTimer();
+    setState(() { _gameOver = true; _resultMsg = ''; });
+    final myUid = FirebaseAuth.instance.currentUser!.uid;
+    final p1Score = _state['p1Score'] as int? ?? 0;
+    final p2Score = _state['p2Score'] as int? ?? 0;
+    bool? won;
+    bool? draw;
+    if (winner != null && winner.isNotEmpty) {
+      draw = winner == 'draw';
+      won = !draw && winner == myUid;
+    }
+    _showFinalResult(p1Score, p2Score, wonOverride: won, drawOverride: draw);
+  }
+
+  void _showFinalResult(int p1Score, int p2Score, {bool? wonOverride, bool? drawOverride}) {
     final myScore  = widget.args.isP1 ? p1Score : p2Score;
     final oppScore = widget.args.isP1 ? p2Score : p1Score;
-    final won  = myScore > oppScore;
-    final draw = myScore == oppScore;
+    final won  = wonOverride ?? (myScore > oppScore);
+    final draw = drawOverride ?? (myScore == oppScore);
 
     showDialog(
       context: context,
@@ -302,7 +396,7 @@ class _RpsGameScreenState extends State<RpsGameScreen>
                 _scoreCol(widget.args.oppName, oppScore, oColor),
               ]),
             ),
-            if (won) ...[
+            if (won && !_vsAi) ...[
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -317,6 +411,10 @@ class _RpsGameScreenState extends State<RpsGameScreen>
                       style: TextStyle(color: const Color(0xFF9A6516), fontWeight: FontWeight.w700, fontSize: 15)),
                 ]),
               ),
+            ],
+            if (_vsAi) ...[
+              const SizedBox(height: 10),
+              Text('Practice vs Computer', style: TextStyle(color: ink3Color, fontSize: 12)),
             ],
             const SizedBox(height: 22),
             ElevatedButton(

@@ -2,11 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,6 +26,26 @@ import 'privacy_policy.dart';
 import 'splash.dart';
 import 'tag_picker.dart';
 
+// Free generated avatars (DiceBear PNG API — no key, no billing, no Storage).
+const List<String> _presetAvatars = [
+  'https://api.dicebear.com/9.x/fun-emoji/png?seed=Tiger&backgroundColor=b6e3f4',
+  'https://api.dicebear.com/9.x/bottts/png?seed=Rocky&backgroundColor=c0aede',
+  'https://api.dicebear.com/9.x/adventurer/png?seed=Zoe&backgroundColor=ffd5dc',
+  'https://api.dicebear.com/9.x/big-smile/png?seed=Max&backgroundColor=d1d4f9',
+  'https://api.dicebear.com/9.x/micah/png?seed=Leo&backgroundColor=ffdfbf',
+  'https://api.dicebear.com/9.x/thumbs/png?seed=Ace&backgroundColor=b6e3f4',
+  'https://api.dicebear.com/9.x/lorelei/png?seed=Mia&backgroundColor=ffd5dc',
+  'https://api.dicebear.com/9.x/notionists/png?seed=Sam&backgroundColor=c0aede',
+  'https://api.dicebear.com/9.x/open-peeps/png?seed=Kai&backgroundColor=d1d4f9',
+  'https://api.dicebear.com/9.x/avataaars/png?seed=Nova&backgroundColor=ffdfbf',
+  'https://api.dicebear.com/9.x/personas/png?seed=Jin&backgroundColor=b6e3f4',
+  'https://api.dicebear.com/9.x/fun-emoji/png?seed=Bolt&backgroundColor=ffd5dc',
+  'https://api.dicebear.com/9.x/bottts/png?seed=Pixel&backgroundColor=d1d4f9',
+  'https://api.dicebear.com/9.x/adventurer/png?seed=Luna&backgroundColor=c0aede',
+  'https://api.dicebear.com/9.x/big-smile/png?seed=Echo&backgroundColor=ffdfbf',
+  'https://api.dicebear.com/9.x/micah/png?seed=Rio&backgroundColor=b6e3f4',
+];
+
 class Profile extends StatefulWidget {
   @override
   _ProfileBodyState createState() => _ProfileBodyState();
@@ -48,9 +66,6 @@ class _ProfileBodyState extends State<Profile>
   String profilePic = guestProfilePic, username = "", name = "";
 
   List<String?> languageList = [];
-  var imageFile;
-  File? _imageFile;
-  final picker = ImagePicker();
   bool isLoading = false;
   final _nameFieldKey = GlobalKey<FormFieldState>();
 
@@ -363,7 +378,7 @@ class _ProfileBodyState extends State<Profile>
                     ]),
                     const SizedBox(height: 16),
                     Center(
-                      child: Text('Chilling Zone · v1.1.3',
+                      child: Text('Chill Zone · v1.1.3',
                           style:
                               TextStyle(fontSize: 12, color: ink3Color)),
                     ),
@@ -533,16 +548,6 @@ class _ProfileBodyState extends State<Profile>
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
-  _imgFromGallery() async {
-    final pickedFile =
-        await picker.pickImage(source: ImageSource.gallery);
-    setState(() {
-      _imageFile = File(pickedFile!.path);
-    });
-    uploadImageToFirebase(context);
-    Navigator.pop(context);
-  }
-
   void changeUserNameInFirebase() async {
     Navigator.of(context).pop();
     final form = _nameFieldKey.currentState!;
@@ -553,34 +558,83 @@ class _ProfileBodyState extends State<Profile>
     }
   }
 
-  Future uploadImageToFirebase(BuildContext context) async {
-    setState(() => isLoading = true);
-    String fileName = _imageFile!.path.split('/').last;
-    firebase_storage.Reference ref = firebase_storage
-        .FirebaseStorage.instance
-        .ref()
-        .child('userProfiles')
-        .child('/$fileName');
-    final metadata = firebase_storage.SettableMetadata(
-        contentType: 'image/jpeg',
-        customMetadata: {'picked-file-path': fileName});
-    firebase_storage.UploadTask uploadTask =
-        ref.putFile(File(_imageFile!.path), metadata);
+  // Preset avatar picker — free generated-avatar URLs (no Firebase Storage /
+  // Blaze plan needed). The whole app renders profilePic via NetworkImage,
+  // so a chosen URL shows up everywhere automatically.
+  void _pickAvatar() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: surfaceColor,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.7),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const SizedBox(height: 12),
+            Container(width: 40, height: 4, decoration: BoxDecoration(
+                color: lineColor, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            Text('Choose your avatar',
+                style: TextStyle(color: inkColor, fontWeight: FontWeight.w800, fontSize: 16)),
+            const SizedBox(height: 14),
+            Flexible(
+              child: GridView.builder(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4, crossAxisSpacing: 12, mainAxisSpacing: 12,
+                ),
+                itemCount: _presetAvatars.length,
+                itemBuilder: (_, i) {
+                  final url = _presetAvatars[i];
+                  final selected = profilePic == url;
+                  return GestureDetector(
+                    onTap: () => _setAvatar(url),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: surface2Color,
+                        border: Border.all(
+                          color: selected ? xColor : lineColor,
+                          width: selected ? 3 : 1,
+                        ),
+                      ),
+                      child: ClipOval(
+                        child: Image.network(url, fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              Icon(Icons.person_rounded, color: ink3Color),
+                          loadingBuilder: (_, child, prog) => prog == null
+                              ? child
+                              : Center(child: SizedBox(width: 18, height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: xColor))),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
 
-    await Future.value(uploadTask).then((value) async {
-      var data = await value.ref.getDownloadURL();
-      var ins = GetUserInfo();
-      await ins.setProfilePic(data);
-      utils.setSnackbar(context,
-          utils.getTranslated(context, "ProfileUpdatedSuccessfully"));
-      setState(() => isLoading = false);
-    }).onError((error, stackTrace) {
+  Future<void> _setAvatar(String url) async {
+    Navigator.pop(context); // close avatar grid
+    setState(() => profilePic = url);
+    try {
+      await GetUserInfo().setProfilePic(url);
       if (mounted) {
         utils.setSnackbar(context,
-            utils.getTranslated(context, "SomethingWentWrong"));
+            utils.getTranslated(context, "ProfileUpdatedSuccessfully"));
       }
-      setState(() => isLoading = false);
-    });
+    } catch (e) {
+      if (mounted) utils.setSnackbar(context, 'Could not update avatar.');
+    }
   }
 
   changeValue(bool val) async {
@@ -712,7 +766,7 @@ class _ProfileBodyState extends State<Profile>
                 child: Column(
                   children: [
                     GestureDetector(
-                      onTap: _imgFromGallery,
+                      onTap: _pickAvatar,
                       child: Stack(
                         children: [
                           CircleAvatar(

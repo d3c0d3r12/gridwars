@@ -5,10 +5,12 @@ import 'package:xobattle/routes/routes.dart';
 import 'package:xobattle/screens/splash.dart';
 import 'package:xobattle/widgets/life_cycle_manager.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'functions/push_service.dart';
 import 'helpers/color.dart';
 import 'helpers/constant.dart';
 
@@ -21,6 +23,9 @@ Future<void> main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
   }
+
+  // Background/terminated push handler (must be registered before runApp).
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
   await ThemeManager.initialize();
 

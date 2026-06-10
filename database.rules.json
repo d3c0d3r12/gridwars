@@ -1,13 +1,50 @@
 {
   "rules": {
-    ".read": "auth != null",
-    ".write": "auth != null",
     "users": {
-      ".indexOn": ["score"]
+      ".read": "root.child('admins').child(auth.uid).val() === true",
+      ".indexOn": ["score", "brainScore"],
+      "$uid": {
+        ".read": "$uid === auth.uid || root.child('admins').child(auth.uid).val() === true",
+        ".write": "$uid === auth.uid || root.child('admins').child(auth.uid).val() === true"
+      }
     },
-    "lobby": {
+    "admins":   { ".read": "auth != null", ".write": false },
+    "discovery": {
       ".read": "auth != null",
-      ".write": "auth != null"
-    }
+      "$uid": { ".write": "$uid === auth.uid" }
+    },
+    "friendRequests": {
+      "$toUid": {
+        ".read": "$toUid === auth.uid",
+        "$fromUid": { ".write": "auth.uid === $fromUid || auth.uid === $toUid" }
+      }
+    },
+    "friends": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        "$friendUid": { ".write": "auth.uid === $uid || auth.uid === $friendUid" }
+      }
+    },
+    "blocked":  { "$uid": { ".read": "$uid === auth.uid", ".write": "$uid === auth.uid" } },
+    "presence": { ".read": "auth != null", "$uid": { ".write": "$uid === auth.uid" } },
+    "chats":    { "$chatId": { ".read": "auth != null", ".write": "auth != null" } },
+    "chatMeta": { "$chatId": { ".read": "auth != null", ".write": "auth != null" } },
+    "challenges": { "$toUid": { ".read": "$toUid === auth.uid", ".write": "auth != null" } },
+    "fcmTokens": { "$uid": { ".read": "$uid === auth.uid", ".write": "$uid === auth.uid" } },
+    "userSkins":   { "$uid": { ".read": "$uid === auth.uid", ".write": "$uid === auth.uid" } },
+    "gameHistory": { "$uid": { ".read": "$uid === auth.uid", ".write": "$uid === auth.uid" } },
+    "Game":        { ".read": "auth != null", ".write": "auth != null" },
+    "lobby":       { ".read": "auth != null", ".write": "auth != null" },
+    "arcadeGames": { "$type": { "$gameId": { ".read": "auth != null", ".write": "auth != null" } } },
+    "arcadeLobby":    { ".read": "auth != null", ".write": "auth != null" },
+    "privateLobbies": { ".read": "auth != null", ".write": "auth != null" },
+    "unoRooms":    { ".read": "auth != null", ".write": "auth != null" },
+    "unoGames":    { ".read": "auth != null", ".write": "auth != null" },
+    "parchiRooms": { ".read": "auth != null", ".write": "auth != null" },
+    "parchiGames": { ".read": "auth != null", ".write": "auth != null" },
+    "liarsRooms":  { ".read": "auth != null", ".write": "auth != null" },
+    "liarsGames":  { ".read": "auth != null", ".write": "auth != null" },
+    "brainPuzzles": { ".read": "auth != null", ".write": false },
+    "adLimit":     { "$uid": { ".read": "$uid === auth.uid", ".write": "$uid === auth.uid" } }
   }
 }

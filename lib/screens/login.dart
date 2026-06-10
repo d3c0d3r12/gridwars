@@ -104,7 +104,7 @@ class _AuthOptionsScreenState extends State<Login>
                       const SizedBox(height: 16),
                       Column(
                         children: [
-                          Text('CHILLING',
+                          Text('CHILL',
                               style: TextStyle(
                                 fontFamily: 'Poppins',
                                 fontWeight: FontWeight.w800,

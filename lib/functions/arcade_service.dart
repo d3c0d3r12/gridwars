@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+
+import '../helpers/constant.dart';
 
 class ArcadeService {
   static final _db   = FirebaseDatabase.instance;
@@ -83,7 +86,21 @@ class ArcadeService {
     });
     await lobbyRef.child(gameId).set(_uid);
     lobbyRef.child(gameId).onDisconnect().remove();
+    // If the creator disconnects before anyone joins, drop the whole game node
+    // too (not just the lobby entry) — otherwise `arcadeGames` accumulates dead
+    // 'waiting' nodes forever. Cancelled once the game actually starts.
+    gameRef.onDisconnect().remove();
     return {'status': 'created', 'gameId': gameId};
+  }
+
+  /// Cancel the creator's "remove whole node on disconnect" hook. Call this the
+  /// moment a game becomes active so a mid-game disconnect is handled by the
+  /// presence watchdog (opponent wins) instead of silently deleting the game.
+  static Future<void> clearWaitingDisconnect(String type, String gameId) async {
+    try {
+      await _db.ref().child('arcadeGames').child(type).child(gameId)
+          .onDisconnect().cancel();
+    } catch (_) {}
   }
 
   static Future<bool> tryJoinExisting(String type, String gameId, int entryFee) async {
@@ -105,17 +122,74 @@ class ArcadeService {
         'arcadeGames/$type/$gameId/p2': _uid,
         'arcadeGames/$type/$gameId/status': 'active',
       }),
-      _db.ref().child('users').child(_uid).child('coin')
-          .runTransaction((v) => Transaction.success((v as int? ?? 0) - entryFee)),
+      // Deduct atomically; never let coins go negative on a concurrent drain.
+      _db.ref().child('users').child(_uid).child('coin').runTransaction((v) {
+        final c = (v as int?) ?? 0;
+        return Transaction.success(c >= entryFee ? c - entryFee : c);
+      }),
     ]);
     return true;
   }
 
+  /// Cancels a *waiting* game and removes its node + lobby entry. Transactional:
+  /// if an opponent has already joined (status != 'waiting') the cancel is a
+  /// no-op so a just-started game is never destroyed under the players.
   static Future<void> cancelGame(String type, String gameId) async {
-    await Future.wait([
-      _db.ref().child('arcadeGames').child(type).child(gameId).update({'status': 'cancelled'}),
-      _db.ref().child('arcadeLobby').child(type).child(gameId).remove(),
-    ]);
+    final gameRef = _db.ref().child('arcadeGames').child(type).child(gameId);
+    try {
+      final tx = await gameRef.runTransaction((current) {
+        if (current == null) return Transaction.success(null);
+        final m = Map<String, dynamic>.from(current as Map);
+        if (m['status'] != 'waiting') return Transaction.abort(); // someone joined
+        return Transaction.success(null); // delete the whole node
+      });
+      // Always clear the lobby entry regardless of the outcome.
+      await _db.ref().child('arcadeLobby').child(type).child(gameId).remove();
+      if (!tx.committed) {
+        // Opponent joined in the meantime — leave the active game intact.
+      }
+    } catch (_) {
+      await _db.ref().child('arcadeLobby').child(type).child(gameId).remove();
+    }
+  }
+
+  // ── Presence / disconnect watchdog ───────────────────────────────────────
+  // Each player marks themselves present under the game node. The mark is
+  // removed automatically by the server if their connection drops (crash, swipe
+  // away, network loss). The opponent watches this and claims the win after a
+  // short grace period. Re-registers on every reconnect via `.info/connected`
+  // so a brief network blip doesn't cost the game.
+
+  static StreamSubscription<DatabaseEvent> keepPresence(String type, String gameId) {
+    final uid = _uid;
+    final ref = _db.ref()
+        .child('arcadeGames').child(type).child(gameId).child('presence').child(uid);
+    return _db.ref().child('.info/connected').onValue.listen((ev) async {
+      if (ev.snapshot.value == true) {
+        try {
+          await ref.onDisconnect().remove();
+          await ref.set(true);
+        } catch (_) {}
+      }
+    });
+  }
+
+  /// Remove my presence mark and cancel its disconnect hook (graceful exit).
+  static Future<void> goOffline(String type, String gameId) async {
+    final ref = _db.ref()
+        .child('arcadeGames').child(type).child(gameId).child('presence').child(_uid);
+    try {
+      await ref.onDisconnect().cancel();
+      await ref.remove();
+    } catch (_) {}
+  }
+
+  /// Best-effort removal of a finished game node to keep `arcadeGames` lean.
+  /// Safe to call from both players; the second call is a harmless no-op.
+  static Future<void> cleanup(String type, String gameId) async {
+    try {
+      await _db.ref().child('arcadeGames').child(type).child(gameId).remove();
+    } catch (_) {}
   }
 
   // ── State updates ────────────────────────────────────────────────────────
@@ -135,30 +209,77 @@ class ArcadeService {
     try {
       final gameRef = _db.ref().child('arcadeGames').child(type).child(gameId);
 
-      // Atomic claim: exactly one of the two players commits the finish.
-      // If status is already 'finished' or 'cancelled', the transaction aborts.
-      final tx = await gameRef.child('status').runTransaction((current) {
-        if (current == 'finished' || current == 'cancelled') return Transaction.abort();
-        return Transaction.success('finished');
+      // Atomic claim: exactly one caller commits the finish, writing status AND
+      // winner together in ONE transaction on the game node. This guarantees any
+      // listener that sees status=='finished' also sees the correct winner in the
+      // same snapshot — no race, no stale/missing winner.
+      final tx = await gameRef.runTransaction((current) {
+        if (current == null) return Transaction.abort();
+        final m = Map<String, dynamic>.from(current as Map);
+        if (m['status'] == 'finished' || m['status'] == 'cancelled') {
+          return Transaction.abort();
+        }
+        m['status'] = 'finished';
+        m['winner'] = winnerUid ?? 'draw';
+        m['endedAt'] = DateTime.now().toUtc().toString();
+        return Transaction.success(m);
       });
 
-      if (!tx.committed) return; // Other player already called endGame — skip.
+      if (!tx.committed) return; // Other player already finished — skip.
 
-      await gameRef.update({
-        'winner': winnerUid ?? 'draw',
-        'endedAt': DateTime.now().toUtc().toString(),
-      });
+      // Pull both player ids from the committed snapshot so we can update the
+      // loser too (rank symmetry with XO ranked: win +winScore, lose -loseScore,
+      // draw +tieScore — and matchplayed +1 for both).
+      final committed = Map<String, dynamic>.from(tx.snapshot.value as Map? ?? {});
+      final p1 = committed['p1']?.toString() ?? '';
+      final p2 = committed['p2']?.toString() ?? '';
 
-      if (winnerUid != null && winnerUid.isNotEmpty && winnerUid != 'draw') {
-        await Future.wait([
+      bool isReal(String uid) => uid.isNotEmpty && uid != '_ai_' && uid != 'draw';
+
+      final futures = <Future>[];
+
+      // matchplayed +1 for both real players.
+      for (final uid in {p1, p2}) {
+        if (!isReal(uid)) continue;
+        futures.add(_db.ref().child('users').child(uid).child('matchplayed')
+            .runTransaction((v) => Transaction.success((v as int? ?? 0) + 1)));
+      }
+
+      final isDraw = winnerUid == null || winnerUid.isEmpty || winnerUid == 'draw';
+
+      if (!isDraw) {
+        final loserUid = winnerUid == p1 ? p2 : p1;
+        // Winner: coins (pot), +winScore rank, +1 win.
+        futures.addAll([
           _db.ref().child('users').child(winnerUid).child('coin').runTransaction(
               (v) => Transaction.success((v as int? ?? 0) + entryFee * 2)),
           _db.ref().child('users').child(winnerUid).child('score').runTransaction(
-              (v) => Transaction.success((v as int? ?? 0) + 10)),
+              (v) => Transaction.success((v as int? ?? 0) + winScore)),
           _db.ref().child('users').child(winnerUid).child('matchwon').runTransaction(
               (v) => Transaction.success((v as int? ?? 0) + 1)),
         ]);
+        // Loser: -loseScore rank (clamped at 0 so it never goes negative).
+        if (isReal(loserUid)) {
+          futures.add(_db.ref().child('users').child(loserUid).child('score')
+              .runTransaction((v) {
+            final c = (v as int? ?? 0) - loseScore;
+            return Transaction.success(c < 0 ? 0 : c);
+          }));
+        }
+      } else {
+        // Draw: refund each player's entry fee + award tieScore rank to both.
+        for (final uid in {p1, p2}) {
+          if (!isReal(uid)) continue;
+          futures.addAll([
+            _db.ref().child('users').child(uid).child('coin').runTransaction(
+                (v) => Transaction.success((v as int? ?? 0) + entryFee)),
+            _db.ref().child('users').child(uid).child('score').runTransaction(
+                (v) => Transaction.success((v as int? ?? 0) + tieScore)),
+          ]);
+        }
       }
+
+      await Future.wait(futures);
     } catch (e) {
       // Silently ignore — game state is written; coin award is best-effort.
     }

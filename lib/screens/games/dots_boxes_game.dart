@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../functions/arcade_service.dart';
+import '../../functions/arcade_ai.dart';
 import '../../helpers/color.dart';
 import '../../screens/arcade_lobby.dart';
 import 'game_widgets.dart';
@@ -21,18 +23,27 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
   bool _gameOver = false;
   bool _abandoned = false;
   bool _disposed = false;
+  bool _resultShown = false;
   StreamSubscription? _sub;
   StreamSubscription? _statusSub;
+  StreamSubscription? _presenceSub;
+  Timer? _oppGoneTimer;
+  Timer? _idleTimer;
+  bool _oppSeen = false;
   late int _myNum;
+  final String _myUid = FirebaseAuth.instance.currentUser!.uid;
 
   // Colors
   static const _myColor  = Color(0xFF4B4EE6);  // indigo — me
   static const _oppColor = Color(0xFFFB6B5B);  // coral  — opponent
 
+  bool get _vsAi => widget.args.vsAi;
+
   @override
   void initState() {
     super.initState();
     _myNum = widget.args.isP1 ? 1 : 2;
+    if (_vsAi) return; // local vs-Computer practice
     _sub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
         .child('state')
         .onValue
@@ -48,22 +59,71 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
         _turn    = int.parse(st['turn'].toString());
       });
       if (!_boxes.contains(0) && !_gameOver) _finishGame();
+      _resetIdleTimer();
     });
+    // Result driven by atomic status+winner field (single source of truth).
     _statusSub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
-        .child('status').onValue.listen((ev) {
-      if (_disposed || !mounted || _gameOver) return;
-      if (ev.snapshot.value?.toString() == 'finished') {
-        setState(() => _gameOver = true);
-        showOpponentLeftDialog(context);
+        .onValue.listen((ev) {
+      if (_disposed || !mounted || ev.snapshot.value == null) return;
+      final data = Map<String, dynamic>.from(ev.snapshot.value as Map);
+      final status = data['status']?.toString();
+      if (status == 'finished' || status == 'cancelled') {
+        _finish(data['winner']?.toString());
+        return;
       }
+      _watchOpponent(data);
+    });
+    _presenceSub = ArcadeService.keepPresence(widget.args.type, widget.args.gameId);
+  }
+
+  // Arms only after the opponent has been seen present — see connect4 for notes.
+  void _watchOpponent(Map<String, dynamic> data) {
+    final presence = data['presence'];
+    final oppHere  = presence is Map && presence[widget.args.oppId] == true;
+    if (oppHere) _oppSeen = true;
+    if (_oppSeen && !oppHere && !_gameOver) {
+      _oppGoneTimer ??= Timer(const Duration(seconds: 8), () {
+        if (_gameOver || _disposed || !mounted) return;
+        ArcadeService.endGame(widget.args.type, widget.args.gameId, _myUid, widget.args.entryFee);
+        _finish(_myUid);
+      });
+    } else {
+      _oppGoneTimer?.cancel();
+      _oppGoneTimer = null;
+    }
+  }
+
+  void _finish(String? winner) {
+    if (_gameOver || _resultShown || _disposed || !mounted) return;
+    setState(() => _gameOver = true);
+    final won  = winner != null && winner.isNotEmpty && winner == _myUid;
+    final draw = winner == null || winner.isEmpty || winner == 'draw';
+    _showResult(won, draw);
+  }
+
+  // "Time over" watchdog: opponent forfeits if idle on their turn past the limit.
+  void _resetIdleTimer() {
+    _idleTimer?.cancel();
+    if (_gameOver || _disposed || _myTurn) return;
+    _idleTimer = Timer(const Duration(seconds: 45), () {
+      if (_gameOver || _disposed || _myTurn || !mounted) return;
+      ArcadeService.endGame(widget.args.type, widget.args.gameId, _myUid, widget.args.entryFee);
+      _finish(_myUid);
     });
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _idleTimer?.cancel();
     _sub?.cancel();
     _statusSub?.cancel();
+    _presenceSub?.cancel();
+    _oppGoneTimer?.cancel();
+    if (!_vsAi) {
+      ArcadeService.goOffline(widget.args.type, widget.args.gameId);
+      if (_resultShown) ArcadeService.cleanup(widget.args.type, widget.args.gameId);
+    }
     super.dispose();
   }
 
@@ -73,8 +133,10 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
     setState(() => _gameOver = true);
     _sub?.cancel();
     _statusSub?.cancel();
-    await ArcadeService.endGame(widget.args.type, widget.args.gameId,
-        widget.args.oppId, widget.args.entryFee);
+    if (!_vsAi) {
+      await ArcadeService.endGame(widget.args.type, widget.args.gameId,
+          widget.args.oppId, widget.args.entryFee);
+    }
     if (mounted && !_disposed) {
       Navigator.of(context).popUntil((route) => route is PageRoute);
       Navigator.of(context).pop();
@@ -113,35 +175,23 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
     if (!_myTurn || _disposed) return;
     final idx = row * 4 + col;
     if (idx < 0 || idx >= _hLines.length || _hLines[idx] != 0) return;
-
-    final newH = List<int>.from(_hLines);
-    final newV = List<int>.from(_vLines);
-    final newB = List<int>.from(_boxes);
-    newH[idx] = _myNum;
-
-    final completed = _getCompletedBoxes(newH, newV);
-    int scored = 0;
-    for (final b in completed) {
-      if (newB[b] == 0) { newB[b] = _myNum; scored++; }
-    }
-
-    int np1 = _p1Score, np2 = _p2Score;
-    if (widget.args.isP1) np1 += scored; else np2 += scored;
-    final next = scored > 0 ? _myNum : (_turn == 1 ? 2 : 1);
-
-    await ArcadeService.updateState(widget.args.type, widget.args.gameId,
-        {'hLines': newH, 'vLines': newV, 'boxes': newB, 'p1Score': np1, 'p2Score': np2, 'turn': next});
+    await _playLine(isH: true, idx: idx);
   }
 
   Future<void> _tapVLine(int row, int col) async {
     if (!_myTurn || _disposed) return;
     final idx = row * 5 + col;
     if (idx < 0 || idx >= _vLines.length || _vLines[idx] != 0) return;
+    await _playLine(isH: false, idx: idx);
+  }
 
+  // Human plays a line. Online → write to Firebase (echo updates state). vs-AI →
+  // apply locally, then hand to the bot when the turn passes.
+  Future<void> _playLine({required bool isH, required int idx}) async {
     final newH = List<int>.from(_hLines);
     final newV = List<int>.from(_vLines);
     final newB = List<int>.from(_boxes);
-    newV[idx] = _myNum;
+    if (isH) newH[idx] = _myNum; else newV[idx] = _myNum;
 
     final completed = _getCompletedBoxes(newH, newV);
     int scored = 0;
@@ -153,32 +203,66 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
     if (widget.args.isP1) np1 += scored; else np2 += scored;
     final next = scored > 0 ? _myNum : (_turn == 1 ? 2 : 1);
 
+    if (_vsAi) {
+      setState(() {
+        _hLines = newH; _vLines = newV; _boxes = newB;
+        _p1Score = np1; _p2Score = np2; _turn = next;
+      });
+      if (!_boxes.contains(0)) { _finishGame(); return; }
+      if (_turn != _myNum) _scheduleAiTurn();
+      return;
+    }
+
     await ArcadeService.updateState(widget.args.type, widget.args.gameId,
         {'hLines': newH, 'vLines': newV, 'boxes': newB, 'p1Score': np1, 'p2Score': np2, 'turn': next});
   }
 
+  // Bot is P2. It keeps moving while it completes boxes (bonus turns).
+  void _scheduleAiTurn() {
+    Future.delayed(const Duration(milliseconds: 550), () {
+      if (!mounted || _gameOver || _disposed || _turn != 2) return;
+      final m = DotsBoxesAi.bestMove(_hLines, _vLines, _boxes, widget.args.aiLevel);
+      if (m == null) return;
+      final newH = List<int>.from(_hLines);
+      final newV = List<int>.from(_vLines);
+      final newB = List<int>.from(_boxes);
+      if (m.isH) newH[m.index] = 2; else newV[m.index] = 2;
+      final completed = _getCompletedBoxes(newH, newV);
+      int scored = 0;
+      for (final b in completed) { if (newB[b] == 0) { newB[b] = 2; scored++; } }
+      setState(() {
+        _hLines = newH; _vLines = newV; _boxes = newB;
+        _p2Score = _p2Score + scored;
+        _turn = scored > 0 ? 2 : 1;
+      });
+      if (!_boxes.contains(0)) { _finishGame(); return; }
+      if (_turn == 2) _scheduleAiTurn(); // bonus turn — keep going
+    });
+  }
+
   void _finishGame() async {
     if (_gameOver || _disposed) return;
-    setState(() => _gameOver = true);
-    String? winner;
-    if (_p1Score > _p2Score) winner = await _getId(true);
-    else if (_p2Score > _p1Score) winner = await _getId(false);
-    await ArcadeService.endGame(
-        widget.args.type, widget.args.gameId, winner, widget.args.entryFee);
-    if (mounted && !_disposed) _showResult();
+    // Winner uid derived locally from scores (both players have them).
+    String winner;
+    if (_p1Score > _p2Score) {
+      winner = widget.args.isP1 ? _myUid : widget.args.oppId;
+    } else if (_p2Score > _p1Score) {
+      winner = widget.args.isP1 ? widget.args.oppId : _myUid;
+    } else {
+      winner = 'draw';
+    }
+    if (!_vsAi) {
+      await ArcadeService.endGame(
+          widget.args.type, widget.args.gameId, winner, widget.args.entryFee);
+    }
+    _finish(winner);
   }
 
-  Future<String> _getId(bool p1) async {
-    if (_disposed) return '';
-    final s = await ArcadeService.stateRef(widget.args.type, widget.args.gameId).once();
-    return ((s.snapshot.value as Map)[p1 ? 'p1' : 'p2'] as String?) ?? '';
-  }
-
-  void _showResult() {
+  void _showResult(bool won, bool draw) {
+    if (_resultShown) return;
+    _resultShown = true;
     final myScore  = widget.args.isP1 ? _p1Score : _p2Score;
     final oppScore = widget.args.isP1 ? _p2Score : _p1Score;
-    final won = myScore > oppScore;
-    final draw = myScore == oppScore;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -200,7 +284,7 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
             const SizedBox(height: 12),
             Text('$myScore — $oppScore boxes',
                 style: TextStyle(color: xColor, fontWeight: FontWeight.w700, fontSize: 18)),
-            if (won) ...[
+            if (won && !_vsAi) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -212,6 +296,10 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
                       style: TextStyle(color: const Color(0xFF9A6516), fontWeight: FontWeight.w700)),
                 ]),
               ),
+            ],
+            if (_vsAi) ...[
+              const SizedBox(height: 10),
+              Text('Practice vs Computer', style: TextStyle(color: ink3Color, fontSize: 12)),
             ],
             const SizedBox(height: 20),
             ElevatedButton(
@@ -233,20 +321,22 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
     );
   }
 
-  void _handleTap(Offset pos, double boardWidth) {
-    // Must use the SAME geometry as the painter: pad=14, cellSz=(width-28)/4
+  void _handleTap(Offset pos, double boardWidth, double boardHeight) {
+    // Must use the SAME geometry as the painter: pad=14, separate cell w/h so the
+    // board can fill a non-square (full-page) area.
     const pad = 14.0;
-    final cellSz = (boardWidth - pad * 2) / 4.0;
+    final cellW = (boardWidth  - pad * 2) / 4.0;
+    final cellH = (boardHeight - pad * 2) / 4.0;
 
     double bestDist = double.infinity;
     String? bestType;
     int bestRow = 0, bestCol = 0;
 
-    // Horizontal lines (5 rows × 4 cols) — midpoint at (pad + (c+0.5)*cell, pad + r*cell)
+    // Horizontal lines (5 rows × 4 cols) — midpoint at (pad + (c+0.5)*cellW, pad + r*cellH)
     for (int r = 0; r <= 4; r++) {
       for (int c = 0; c < 4; c++) {
-        final mx = pad + (c + 0.5) * cellSz;
-        final my = pad + r * cellSz;
+        final mx = pad + (c + 0.5) * cellW;
+        final my = pad + r * cellH;
         final d = (pos - Offset(mx, my)).distance;
         if (d < bestDist) {
           bestDist = d; bestType = 'h'; bestRow = r; bestCol = c;
@@ -254,11 +344,11 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
       }
     }
 
-    // Vertical lines (4 rows × 5 cols) — midpoint at (pad + c*cell, pad + (r+0.5)*cell)
+    // Vertical lines (4 rows × 5 cols) — midpoint at (pad + c*cellW, pad + (r+0.5)*cellH)
     for (int r = 0; r < 4; r++) {
       for (int c = 0; c <= 4; c++) {
-        final mx = pad + c * cellSz;
-        final my = pad + (r + 0.5) * cellSz;
+        final mx = pad + c * cellW;
+        final my = pad + (r + 0.5) * cellH;
         final d = (pos - Offset(mx, my)).distance;
         if (d < bestDist) {
           bestDist = d; bestType = 'v'; bestRow = r; bestCol = c;
@@ -267,7 +357,7 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
     }
 
     // Only register taps reasonably close to a line
-    if (bestDist > cellSz * 0.6) return;
+    if (bestDist > ((cellW + cellH) / 2) * 0.6) return;
 
     if (bestType == 'h') {
       _tapHLine(bestRow, bestCol);
@@ -354,37 +444,34 @@ class _DotsBoxesGameScreenState extends State<DotsBoxesGameScreen> {
 
             const SizedBox(height: 10),
 
-            // ── Board ────────────────────────────────────────────────────
+            // ── Board (fills the page) ───────────────────────────────────
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: surfaceColor,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: lineColor, width: 1.5),
-                      boxShadow: [shadow],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(19),
-                      child: LayoutBuilder(builder: (_, c) {
-                        return GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTapUp: (det) => _handleTap(det.localPosition, c.maxWidth),
-                          child: CustomPaint(
-                            painter: _DotsBoxesPainter(
-                              h: _hLines, v: _vLines, boxes: _boxes,
-                              isP1: widget.args.isP1,
-                              myColor: _myColor, oppColor: _oppColor,
-                              myTurn: _myTurn,
-                            ),
-                            size: c.biggest,
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: surfaceColor,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: lineColor, width: 1.5),
+                    boxShadow: [shadow],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(19),
+                    child: LayoutBuilder(builder: (_, c) {
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTapUp: (det) => _handleTap(det.localPosition, c.maxWidth, c.maxHeight),
+                        child: CustomPaint(
+                          painter: _DotsBoxesPainter(
+                            h: _hLines, v: _vLines, boxes: _boxes,
+                            isP1: widget.args.isP1,
+                            myColor: _myColor, oppColor: _oppColor,
+                            myTurn: _myTurn,
                           ),
-                        );
-                      }),
-                    ),
+                          size: c.biggest,
+                        ),
+                      );
+                    }),
                   ),
                 ),
               ),
@@ -503,9 +590,12 @@ class _DotsBoxesPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Padding inside the white card
+    // Padding inside the white card. Separate cell width/height lets the board
+    // fill a non-square (full-page) area instead of being locked to a square.
     const pad = 14.0;
-    final cellSz = (size.width - pad * 2) / 4.0;
+    final cellW = (size.width  - pad * 2) / 4.0;
+    final cellH = (size.height - pad * 2) / 4.0;
+    final cellMin = cellW < cellH ? cellW : cellH;
 
     // ── 1. Box fills ────────────────────────────────────────────────────
     for (int r = 0; r < 4; r++) {
@@ -514,8 +604,8 @@ class _DotsBoxesPainter extends CustomPainter {
         if (owner == 0) continue;
         final col = _ownerColor(owner);
         final rect = Rect.fromLTWH(
-          pad + c * cellSz + 3, pad + r * cellSz + 3,
-          cellSz - 6, cellSz - 6,
+          pad + c * cellW + 3, pad + r * cellH + 3,
+          cellW - 6, cellH - 6,
         );
         canvas.drawRRect(
           RRect.fromRectAndRadius(rect, const Radius.circular(6)),
@@ -527,15 +617,15 @@ class _DotsBoxesPainter extends CustomPainter {
             text: isP1 ? (owner == 1 ? 'Y' : 'O') : (owner == 2 ? 'Y' : 'O'),
             style: TextStyle(
               color: col.withValues(alpha: 0.55),
-              fontSize: cellSz * 0.35,
+              fontSize: cellMin * 0.35,
               fontWeight: FontWeight.w800,
             ),
           ),
           textDirection: TextDirection.ltr,
         )..layout();
         tp.paint(canvas, Offset(
-          pad + c * cellSz + (cellSz - tp.width) / 2,
-          pad + r * cellSz + (cellSz - tp.height) / 2,
+          pad + c * cellW + (cellW - tp.width) / 2,
+          pad + r * cellH + (cellH - tp.height) / 2,
         ));
       }
     }
@@ -545,8 +635,8 @@ class _DotsBoxesPainter extends CustomPainter {
       for (int c = 0; c < 4; c++) {
         if (boxes[r * 4 + c] != 0) continue;
         final rect = Rect.fromLTWH(
-          pad + c * cellSz, pad + r * cellSz,
-          cellSz, cellSz,
+          pad + c * cellW, pad + r * cellH,
+          cellW, cellH,
         );
         canvas.drawRect(rect,
           Paint()
@@ -562,9 +652,9 @@ class _DotsBoxesPainter extends CustomPainter {
         final owner = h[r * 4 + c];
         final drawn = owner != 0;
         final col = drawn ? _ownerColor(owner) : const Color(0xFFCDD0DA);
-        final x1 = pad + c * cellSz + (drawn ? 4.0 : 8.0);
-        final x2 = pad + (c + 1) * cellSz - (drawn ? 4.0 : 8.0);
-        final y  = pad + r * cellSz;
+        final x1 = pad + c * cellW + (drawn ? 4.0 : 8.0);
+        final x2 = pad + (c + 1) * cellW - (drawn ? 4.0 : 8.0);
+        final y  = pad + r * cellH;
 
         canvas.drawLine(
           Offset(x1, y), Offset(x2, y),
@@ -594,9 +684,9 @@ class _DotsBoxesPainter extends CustomPainter {
         final owner = v[r * 5 + c];
         final drawn = owner != 0;
         final col = drawn ? _ownerColor(owner) : const Color(0xFFCDD0DA);
-        final x  = pad + c * cellSz;
-        final y1 = pad + r * cellSz + (drawn ? 4.0 : 8.0);
-        final y2 = pad + (r + 1) * cellSz - (drawn ? 4.0 : 8.0);
+        final x  = pad + c * cellW;
+        final y1 = pad + r * cellH + (drawn ? 4.0 : 8.0);
+        final y2 = pad + (r + 1) * cellH - (drawn ? 4.0 : 8.0);
 
         canvas.drawLine(
           Offset(x, y1), Offset(x, y2),
@@ -622,8 +712,8 @@ class _DotsBoxesPainter extends CustomPainter {
     // ── 5. Dots ─────────────────────────────────────────────────────────
     for (int r = 0; r <= 4; r++) {
       for (int c = 0; c <= 4; c++) {
-        final cx = pad + c * cellSz;
-        final cy = pad + r * cellSz;
+        final cx = pad + c * cellW;
+        final cy = pad + r * cellH;
         // Shadow
         canvas.drawCircle(Offset(cx, cy), 7,
           Paint()..color = const Color(0x22000000)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));

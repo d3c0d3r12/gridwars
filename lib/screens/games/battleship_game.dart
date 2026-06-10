@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../functions/arcade_service.dart';
+import '../../functions/arcade_ai.dart';
 import '../../helpers/color.dart';
 import '../../helpers/constant.dart';
 import '../../helpers/utils.dart';
@@ -24,17 +25,33 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
   bool _myReady = false, _oppReady = false, _gameOver = false;
   bool _abandoned = false;
   bool _disposed = false;
+  bool _resultShown = false;
   StreamSubscription? _sub;
   StreamSubscription? _statusSub;
+  StreamSubscription? _presenceSub;
+  Timer? _oppGoneTimer;
+  Timer? _idleTimer;
+  bool _oppSeen = false;
   late int _myNum;
+  final String _myUid = FirebaseAuth.instance.currentUser!.uid;
 
   static const int _totalShipCells = 17;
+
+  bool get _vsAi => widget.args.vsAi;
+  List<int> _aiShips = List.filled(100, 0); // bot's fleet (vs-AI only)
 
   @override
   void initState() {
     super.initState();
     _myNum = widget.args.isP1 ? 1 : 2;
     _myShips = ArcadeService.randomShipPlacement();
+
+    // Local vs-Computer practice: bot gets its own fleet and is always "ready".
+    if (_vsAi) {
+      _aiShips = ArcadeService.randomShipPlacement();
+      _oppReady = true;
+      return;
+    }
 
     _sub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
         .child('state')
@@ -72,23 +89,81 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
       } else if (_oppHits >= _totalShipCells && !_gameOver) {
         Future.microtask(() => _endGame(true));
       }
+      _resetIdleTimer();
     });
 
+    // Result driven by atomic status+winner field (single source of truth).
     _statusSub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
-        .child('status').onValue.listen((ev) {
-      if (_disposed || !mounted || _gameOver) return;
-      if (ev.snapshot.value?.toString() == 'finished') {
-        setState(() => _gameOver = true);
-        showOpponentLeftDialog(context);
+        .onValue.listen((ev) {
+      if (_disposed || !mounted || ev.snapshot.value == null) return;
+      final data = Map<String, dynamic>.from(ev.snapshot.value as Map);
+      final status = data['status']?.toString();
+      if (status == 'finished' || status == 'cancelled') {
+        _finish(data['winner']?.toString());
+        return;
       }
+      _watchOpponent(data);
+    });
+    _presenceSub = ArcadeService.keepPresence(widget.args.type, widget.args.gameId);
+  }
+
+  // Arms only after the opponent has been seen present — see connect4 for notes.
+  // Covers the placement phase too: if the opponent never readies up because
+  // they left, you still win instead of waiting forever.
+  void _watchOpponent(Map<String, dynamic> data) {
+    final presence = data['presence'];
+    final oppHere  = presence is Map && presence[widget.args.oppId] == true;
+    if (oppHere) _oppSeen = true;
+    if (_oppSeen && !oppHere && !_gameOver) {
+      _oppGoneTimer ??= Timer(const Duration(seconds: 8), () {
+        if (_gameOver || _disposed || !mounted) return;
+        ArcadeService.endGame(widget.args.type, widget.args.gameId, _myUid, widget.args.entryFee);
+        _finish(_myUid);
+      });
+    } else {
+      _oppGoneTimer?.cancel();
+      _oppGoneTimer = null;
+    }
+  }
+
+  void _finish(String? winner) {
+    if (_gameOver || _resultShown || _disposed || !mounted) return;
+    setState(() => _gameOver = true);
+    _showResult(winner != null && winner.isNotEmpty && winner == _myUid);
+  }
+
+  // True when the game is waiting on the OPPONENT to act: their attack turn, or
+  // (during placement) I'm ready and they still haven't readied up.
+  bool get _waitingOnOpp {
+    if (_gameOver) return false;
+    if (_phase == 'attack') return !_myTurn;
+    return _myReady && !_oppReady;
+  }
+
+  // "Time over" watchdog: opponent forfeits if they stall (but stay connected)
+  // past the limit while it's their move / ready-up. Never arms on my own turn.
+  void _resetIdleTimer() {
+    _idleTimer?.cancel();
+    if (!_waitingOnOpp) return;
+    _idleTimer = Timer(const Duration(seconds: 45), () {
+      if (_gameOver || _disposed || !mounted || !_waitingOnOpp) return;
+      ArcadeService.endGame(widget.args.type, widget.args.gameId, _myUid, widget.args.entryFee);
+      _finish(_myUid);
     });
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _idleTimer?.cancel();
     _sub?.cancel();
     _statusSub?.cancel();
+    _presenceSub?.cancel();
+    _oppGoneTimer?.cancel();
+    if (!_vsAi) {
+      ArcadeService.goOffline(widget.args.type, widget.args.gameId);
+      if (_resultShown) ArcadeService.cleanup(widget.args.type, widget.args.gameId);
+    }
     super.dispose();
   }
 
@@ -98,7 +173,9 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
     setState(() => _gameOver = true);
     _sub?.cancel();
     _statusSub?.cancel();
-    await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
+    if (!_vsAi) {
+      await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
+    }
     if (mounted && !_disposed) {
       Navigator.of(context).popUntil((route) => route is PageRoute);
       Navigator.of(context).pop();
@@ -119,6 +196,11 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
 
   Future<void> _readyUp() async {
     if (_disposed) return;
+    if (_vsAi) {
+      // Bot is already ready — go straight to the attack phase, human fires first.
+      setState(() { _myReady = true; _phase = 'attack'; _turn = 1; });
+      return;
+    }
     setState(() => _myReady = true);
     final myKey   = widget.args.isP1 ? 'p1Ready' : 'p2Ready';
     final shipsKey = widget.args.isP1 ? 'p1Ships' : 'p2Ships';
@@ -143,7 +225,19 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
 
   Future<void> _fire(int idx) async {
     if (!_myTurn || _gameOver || _disposed) return;
-    if (_oppAttacks[idx] != 0) return;
+    if (_oppAttacks[idx] != 0) return; // _oppAttacks = MY shots on the enemy grid
+
+    // ── Local vs-Computer practice ──
+    if (_vsAi) {
+      final isHit = _aiShips[idx] == 1;
+      final shots = List<int>.from(_oppAttacks)..[idx] = isHit ? 2 : 3;
+      final newHits = _myHits + (isHit ? 1 : 0);
+      music.play(dice);
+      setState(() { _oppAttacks = shots; _myHits = newHits; if (!isHit) _turn = 2; });
+      if (newHits >= _totalShipCells) { _endGame(true); return; }
+      if (!isHit) _scheduleAiFire();
+      return;
+    }
 
     final oppShipsKey = widget.args.isP1 ? 'p2Ships' : 'p1Ships';
     final myAtkKey    = widget.args.isP1 ? 'p1Attacks' : 'p2Attacks';
@@ -183,20 +277,42 @@ class _BattleshipGameScreenState extends State<BattleshipGameScreen> {
     }
   }
 
+  // Bot fires on the human's fleet (_myShips). Keeps firing while it hits.
+  void _scheduleAiFire() {
+    Future.delayed(const Duration(milliseconds: 750), () {
+      if (!mounted || _gameOver || _disposed || _turn != 2) return;
+      // _myAttacks = the opponent's shots on my board (the bot's attack history).
+      final idx = BattleshipAi.nextAttack(_myShips, _myAttacks, widget.args.aiLevel);
+      if (idx < 0) return;
+      final isHit = _myShips[idx] == 1;
+      final shots = List<int>.from(_myAttacks)..[idx] = isHit ? 2 : 3;
+      final newOppHits = _oppHits + (isHit ? 1 : 0);
+      music.play(dice);
+      setState(() { _myAttacks = shots; _oppHits = newOppHits; if (!isHit) _turn = 1; });
+      if (newOppHits >= _totalShipCells) { _endGame(false); return; }
+      if (isHit) _scheduleAiFire(); // hit → fire again
+    });
+  }
+
   void _endGame(bool won) async {
     if (_gameOver || _disposed) return;
-    setState(() => _gameOver = true);
-    final winnerId = won ? FirebaseAuth.instance.currentUser!.uid : null;
-    await ArcadeService.endGame(widget.args.type, widget.args.gameId, winnerId, widget.args.entryFee);
-    if (mounted && !_disposed) _showResult(won);
+    // Loser must record the OPPONENT as winner (not null/draw) so both sides
+    // agree on the result regardless of which write commits first.
+    final winnerId = won ? _myUid : widget.args.oppId;
+    if (!_vsAi) {
+      await ArcadeService.endGame(widget.args.type, widget.args.gameId, winnerId, widget.args.entryFee);
+    }
+    _finish(winnerId);
   }
 
   void _showResult(bool won) {
+    if (_resultShown) return;
+    _resultShown = true;
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
       backgroundColor: surfaceColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
       title: Text(won ? '🏆 All Ships Sunk!' : '💥 Fleet Destroyed!', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      content: Text(won ? 'You Win!\n+${widget.args.entryFee * 2} coins' : 'You Lose!', style: TextStyle(color: xColor, fontSize: 18), textAlign: TextAlign.center),
+      content: Text(_vsAi ? (won ? 'You beat the Computer!' : 'The Computer won!') : (won ? 'You Win!\n+${widget.args.entryFee * 2} coins' : 'You Lose!'), style: TextStyle(color: xColor, fontSize: 18), textAlign: TextAlign.center),
       actions: [TextButton(onPressed: () {
         if (Navigator.canPop(context)) Navigator.pop(context);
         if (Navigator.canPop(context)) Navigator.pop(context);

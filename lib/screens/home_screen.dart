@@ -17,8 +17,10 @@ import '../functions/getCoin.dart';
 import '../models/sound_effect.dart';
 import '../widgets/xo_logo.dart';
 import '../functions/admin_service.dart';
+import '../functions/hint_service.dart';
 import '../functions/friend_service.dart';
 import '../functions/notification_service.dart';
+import '../functions/push_service.dart';
 import '../helpers/game_tags.dart';
 import 'admin_panel.dart';
 import 'arcade.dart';
@@ -85,6 +87,14 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
+    // Print the signed-in account so the owner UID can be granted admin in the
+    // Firebase console (admins/{uid}: true).
+    debugPrint(
+        'ACCOUNT_UID=$uid EMAIL=${FirebaseAuth.instance.currentUser?.email}');
+
+    // Owner account → unlimited coins + bulbs.
+    HintService.ownerTopUp();
+
     // Check admin status
     final admin = await AdminService.isAdmin(uid);
     if (mounted) setState(() => _isAdmin = admin);
@@ -115,6 +125,8 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
   // Start in-app notifications (badges + banners) and listen for game challenges.
   void _startNotifications() {
     FriendService.goOnline();
+    // WhatsApp-style background push (FCM): register token + foreground banners.
+    PushService.instance.start();
     NotificationService.instance.onBanner = (msg) {
       if (mounted) utils.setSnackbar(context, msg);
     };
@@ -234,79 +246,57 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
               slivers: [
                 SliverToBoxAdapter(child: _buildTopBar()),
                 SliverToBoxAdapter(child: _buildHeroCard()),
+                SliverToBoxAdapter(child: _buildFriendsRoomCard()),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
-                    child: _SectionLabel(label: 'Game Modes'),
+                    child: Row(
+                      children: [
+                        _SectionLabel(label: 'All Games'),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: goldSoft,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                                color: goldColor.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.emoji_events_rounded,
+                                color: goldColor, size: 13),
+                            const SizedBox(width: 4),
+                            Text('Ranked on every game',
+                                style: TextStyle(
+                                    color: const Color(0xFF9A6516),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 10.5)),
+                          ]),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                  sliver: SliverGrid(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 0.92,
+                    ),
+                    delegate: SliverChildListDelegate(_allGameTiles()),
                   ),
                 ),
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
-                      _ModeCard(
-                        icon: Icons.person,
-                        iconColor: xColor,
-                        iconBg: xSoft,
-                        title: utils.getTranslated(context, "OFFLINE_PLAY"),
-                        sub: utils.getTranslated(
-                            context, "Play_with_the_Clever_Fox_DORA"),
-                        onTap: () => playButtonPressed(0),
-                      ),
-                      const SizedBox(height: 11),
-                      _ModeCard(
-                        icon: Icons.public,
-                        iconColor: goldColor,
-                        iconBg: goldSoft,
-                        title: 'RANKED MATCH',
-                        sub: utils.getTranslated(
-                            context, "Find_your_match_around_the_world"),
-                        onTap: () => playButtonPressed(1),
-                        accent: true,
-                      ),
-                      const SizedBox(height: 11),
-                      _ModeCard(
-                        icon: Icons.people,
-                        iconColor: oColor,
-                        iconBg: oSoft,
-                        title: utils.getTranslated(context, "PASS_N_PLAY"),
-                        sub: utils.getTranslated(
-                            context, "Pass_N_Play_With_your_Friend"),
-                        onTap: () => playButtonPressed(2),
-                      ),
-                      const SizedBox(height: 11),
-                      _ModeCard(
-                        icon: Icons.lock_open,
-                        iconColor: const Color(0xFF00BCD4),
-                        iconBg: const Color(0xFF00BCD4).withValues(alpha: 0.12),
-                        title: 'PRIVATE ROOM',
-                        sub: 'Create or join a room with a friend',
-                        onTap: () => _openPrivateRoom(),
-                      ),
-                      const SizedBox(height: 11),
-                      _ModeCard(
-                        icon: Icons.bolt,
-                        iconColor: const Color(0xFFFF5252),
-                        iconBg:
-                            const Color(0xFFFF5252).withValues(alpha: 0.12),
-                        title: 'BLITZ MODE',
-                        sub: '7 seconds per move — think fast!',
-                        onTap: () => _openBlitz(),
-                      ),
-                      const SizedBox(height: 11),
-                      _ModeCard(
-                        icon: Icons.local_fire_department,
-                        iconColor: const Color(0xFF66BB6A),
-                        iconBg:
-                            const Color(0xFF66BB6A).withValues(alpha: 0.12),
-                        title: 'STREAK CHALLENGE',
-                        sub: 'Beat STRIKER in a row, earn coins',
-                        onTap: () => _openStreak(),
-                      ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 18),
                       _buildDailyStrip(),
-                      const SizedBox(height: 12),
-                      _buildArcadeBanner(),
                       const SizedBox(height: 96),
                     ]),
                   ),
@@ -338,7 +328,7 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('CHILLING',
+                    Text('CHILL',
                         style: TextStyle(
                             fontFamily: 'Poppins',
                             fontWeight: FontWeight.w800,
@@ -541,6 +531,78 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
     );
   }
 
+  // ─── Play with Friends (private room: create / join by code) ────────────────
+
+  Widget _buildFriendsRoomCard() {
+    const teal = Color(0xFF00BCD4);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      child: GestureDetector(
+        onTap: _openPrivateRoom,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: teal.withValues(alpha: 0.35)),
+            boxShadow: [shadowSm],
+            gradient: LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [teal.withValues(alpha: 0.12), surfaceColor],
+            ),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: surfaceColor,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [shadowSm],
+                ),
+                child: const Icon(Icons.groups_rounded, color: teal, size: 25),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Play with Friends',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            color: inkColor)),
+                    const SizedBox(height: 2),
+                    Text('Create or join a room with a code',
+                        style: TextStyle(fontSize: 12, color: ink2Color)),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: teal,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.add_rounded, color: Colors.white, size: 16),
+                  SizedBox(width: 3),
+                  Text('Create / Join',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12)),
+                ]),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // ─── Daily strip ──────────────────────────────────────────────────────────
 
   Widget _buildDailyStrip() {
@@ -620,59 +682,6 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
     );
   }
 
-  // ─── Arcade banner ────────────────────────────────────────────────────────
-
-  Widget _buildArcadeBanner() {
-    return GestureDetector(
-      onTap: () {
-        music.play(click);
-        Navigator.push(context,
-            CupertinoPageRoute(builder: (_) => const ArcadeScreen()));
-      },
-      child: Container(
-        decoration: cardDecoration(radius: 22),
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text('Arcade',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
-                            color: inkColor)),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: xSoft,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text('6 GAMES',
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: xColor,
-                              letterSpacing: 0.5)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text('RPS · Connect 4 · Checkers & more',
-                    style: TextStyle(fontSize: 12, color: ink2Color)),
-              ],
-            ),
-            const Spacer(),
-            Icon(Icons.chevron_right_rounded, color: ink3Color),
-          ],
-        ),
-      ),
-    );
-  }
 
   // ─── Quick-play bottom sheet ───────────────────────────────────────────────
 
@@ -695,6 +704,148 @@ class HomeScreenActivityState extends State<HomeScreenActivity>
           Navigator.pop(context);
           playButtonPressed(1);
         },
+      ),
+    );
+  }
+
+  // ─── Unified game grid ─────────────────────────────────────────────────────
+
+  // All games in one section — Tic Tac Toe sits alongside every arcade game,
+  // no longer singled out. Tic Tac Toe opens its own modes sheet; the rest
+  // reuse the arcade mode chooser (online ranked + free vs-Computer).
+  List<Widget> _allGameTiles() {
+    return [
+      _HomeGameTile(
+        name: 'Tic Tac Toe',
+        desc: 'The classic 3-in-a-row',
+        icon: Icons.close_rounded,
+        accent: xColor,
+        onTap: () {
+          music.play(click);
+          _showXoModeSheet();
+        },
+      ),
+      for (final g in kArcadeGames)
+        _HomeGameTile(
+          name: g.name.replaceAll('\n', ' '),
+          desc: g.desc,
+          icon: g.icon,
+          accent: g.accent,
+          onTap: () {
+            music.play(click);
+            openArcadeModeSheet(context, g);
+          },
+        ),
+    ];
+  }
+
+  // Tic-Tac-Toe modes (online ranked awards rank just like every other game).
+  void _showXoModeSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(28)),
+          boxShadow: [shadowLg],
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: lineColor,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: xSoft,
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(Icons.close_rounded, color: xColor, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Text('Tic Tac Toe',
+                    style: TextStyle(
+                        color: inkColor,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18)),
+              ]),
+              const SizedBox(height: 18),
+              _SheetTile(
+                icon: Icons.public,
+                color: goldColor,
+                bg: goldSoft,
+                title: 'Online Ranked',
+                sub: 'Matchmake & climb the leaderboard',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  playButtonPressed(1);
+                },
+              ),
+              const SizedBox(height: 11),
+              _SheetTile(
+                icon: Icons.smart_toy_outlined,
+                color: xColor,
+                bg: xSoft,
+                title: 'vs Computer',
+                sub: 'Play DORA across Easy → Hard',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  playButtonPressed(0);
+                },
+              ),
+              const SizedBox(height: 11),
+              _SheetTile(
+                icon: Icons.people_alt_outlined,
+                color: oColor,
+                bg: oSoft,
+                title: 'Pass & Play',
+                sub: 'Two players, one device',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  playButtonPressed(2);
+                },
+              ),
+              const SizedBox(height: 11),
+              _SheetTile(
+                icon: Icons.bolt,
+                color: const Color(0xFFFF5252),
+                bg: const Color(0xFFFF5252).withValues(alpha: 0.12),
+                title: 'Blitz Mode',
+                sub: '7 seconds per move — think fast!',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openBlitz();
+                },
+              ),
+              const SizedBox(height: 11),
+              _SheetTile(
+                icon: Icons.local_fire_department,
+                color: const Color(0xFF66BB6A),
+                bg: const Color(0xFF66BB6A).withValues(alpha: 0.12),
+                title: 'Streak Challenge',
+                sub: 'Beat STRIKER in a row, earn coins',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openStreak();
+                },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1061,25 +1212,21 @@ Widget _coinPill(String label) {
   );
 }
 
-// ── Mode card ──────────────────────────────────────────────────────────────────
+// ── Home game tile (unified grid) ──────────────────────────────────────────────
 
-class _ModeCard extends StatelessWidget {
+class _HomeGameTile extends StatelessWidget {
+  final String name;
+  final String desc;
   final IconData icon;
-  final Color iconColor;
-  final Color iconBg;
-  final String title;
-  final String sub;
+  final Color accent;
   final VoidCallback onTap;
-  final bool accent;
 
-  const _ModeCard({
+  const _HomeGameTile({
+    required this.name,
+    required this.desc,
     required this.icon,
-    required this.iconColor,
-    required this.iconBg,
-    required this.title,
-    required this.sub,
+    required this.accent,
     required this.onTap,
-    this.accent = false,
   });
 
   @override
@@ -1088,44 +1235,61 @@ class _ModeCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: accent ? xColor.withValues(alpha: 0.06) : surfaceColor,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-              color: accent ? xColor.withValues(alpha: 0.3) : lineColor),
+          color: surfaceColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: lineColor),
           boxShadow: [shadowSm],
         ),
-        padding: const EdgeInsets.all(14),
-        child: Row(
+        padding: const EdgeInsets.all(15),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 46,
-              height: 46,
+              width: 50,
+              height: 50,
               decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(14),
+                color: accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(15),
               ),
-              child: Icon(icon, color: iconColor, size: 23),
+              child: Icon(icon, color: accent, size: 26),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(height: 12),
+            Text(
+              name,
+              style: TextStyle(
+                  color: inkColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  height: 1.2),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 5),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14.5,
-                          color: inkColor)),
-                  const SizedBox(height: 2),
-                  Text(sub,
-                      style:
-                          TextStyle(fontSize: 12, color: ink2Color),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                ],
+              child: Text(
+                desc,
+                style: TextStyle(color: ink2Color, fontSize: 11.5, height: 1.4),
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: ink3Color, size: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Play',
+                    style: TextStyle(
+                        color: ink3Color,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11.5)),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.play_arrow_rounded, color: accent, size: 18),
+                ),
+              ],
+            ),
           ],
         ),
       ),

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 
+import 'push_sender.dart';
+
 // ── Models ─────────────────────────────────────────────────────────────────
 
 class DiscoveryUser {
@@ -163,6 +165,12 @@ class FriendService {
         'fromPic': myPic,
         'time': ServerValue.timestamp,
       });
+      // WhatsApp-style background push (free Cloudflare backend; no-op if unset).
+      PushSender.notify(
+        toUid: toUid,
+        type: 'friend_request',
+        body: '$myName sent you a friend request',
+      );
       return null;
     } catch (e) {
       return 'Could not send request. Make sure the Firebase rules are applied.';
@@ -284,6 +292,8 @@ class FriendService {
         'time': ServerValue.timestamp,
         'seen': false,
       });
+      // The Worker fills the title with the sender's name for chat pushes.
+      PushSender.notify(toUid: otherUid, type: 'chat', body: t);
       return null;
     } catch (e) {
       return 'Could not send. Check Firebase rules / connection.';
@@ -381,6 +391,12 @@ class FriendService {
       'gameKey': gameKey,
       'time': ServerValue.timestamp,
     });
+    PushSender.notify(
+      toUid: friendUid,
+      type: 'challenge',
+      body: '$myName challenged you to a game!',
+      data: {'gameType': gameType, 'gameKey': gameKey},
+    );
     return ref.key!;
   }
 

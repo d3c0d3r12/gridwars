@@ -60,7 +60,7 @@ class ChillingZoneWordmark extends StatelessWidget {
             ),
             children: [
               TextSpan(
-                text: 'CHILLING',
+                text: 'CHILL',
                 style: TextStyle(color: col),
               ),
             ],

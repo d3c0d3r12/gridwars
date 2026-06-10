@@ -14,6 +14,7 @@ import '../functions/dialoges.dart';
 import '../functions/findGame.dart';
 import '../functions/getCoin.dart';
 import 'multiplayer.dart';
+import 'offline_play.dart';
 import 'splash.dart';
 
 class FindingPlayerScreen extends StatefulWidget {
@@ -55,6 +56,7 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
   bool isCoinAndCountValueUpdated = false;
   String oppMsg = findingOpp, img = "dora_findopponent", btnTxtKey = "cancel";
   String? imagex, imageo;
+  String _userSkin = '', _oppSkin = '';
   late DatabaseReference _userSkinRef;
 
   @override
@@ -68,6 +70,7 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
     getFieldValue("profilePic", (e) => _profilePic = e, (e) => _profilePic = e);
     getFieldValue("username", (e) => _displayName = e, (e) => _displayName = e);
 
+    _loadSkins();
     findGame();
     getImage();
 
@@ -117,6 +120,41 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
     });
 
     setState(() {});
+  }
+
+  Future<void> _loadSkins() async {
+    try {
+      _userSkin = (await Utils().getSkinValue("user_skin")).toString();
+      _oppSkin = (await Utils().getSkinValue("opponent_skin")).toString();
+    } catch (_) {}
+  }
+
+  // No opponent found → fall back to a free offline match vs DORA (Medium).
+  void _playWithAi() async {
+    oppTimer?.cancel();
+    listen?.cancel();
+    listen = null;
+    // Clean up the waiting game we created so it doesn't linger in the lobby.
+    if (_createdGameKey != null && _createdGameKey!.isNotEmpty) {
+      await FindGame().cancelWaiting(
+        _createdGameKey!,
+        widget.matrixSize,
+        widget.selected ?? 0,
+        widget.round ?? 1,
+      );
+      _temp = "";
+      _createdGameKey = null;
+      _lobbyKey = "";
+    }
+    if (!mounted) return;
+    Navigator.pushReplacement(context, CupertinoPageRoute(builder: (_) {
+      return SinglePlayerScreenActivity(
+        _userSkin.isNotEmpty ? _userSkin : null,
+        _oppSkin.isNotEmpty ? _oppSkin : null,
+        1, // Medium
+        widget.matrixSize,
+      );
+    }));
   }
 
 //get opponent user details
@@ -593,6 +631,36 @@ class _FindingPlayerScreenState extends State<FindingPlayerScreen> {
                                 if (mounted) Navigator.pop(context);
                               }
                             }),
+                        if (btnTxtKey == "tryAgain") ...[
+                          const SizedBox(height: 12),
+                          GestureDetector(
+                            onTap: _playWithAi,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 26, vertical: 12),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(14),
+                                color: xColor,
+                                boxShadow: [
+                                  BoxShadow(
+                                      color: xColor.withValues(alpha: 0.35),
+                                      blurRadius: 16,
+                                      offset: const Offset(0, 8))
+                                ],
+                              ),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                const Icon(Icons.smart_toy_rounded,
+                                    color: Colors.white, size: 18),
+                                const SizedBox(width: 8),
+                                const Text('Play with AI',
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14)),
+                              ]),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 20),
                       ],
                     ),

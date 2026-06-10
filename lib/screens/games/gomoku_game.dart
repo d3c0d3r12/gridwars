@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../functions/arcade_service.dart';
+import '../../functions/arcade_ai.dart';
 import '../../helpers/color.dart';
 import '../../helpers/constant.dart';
 import '../../helpers/utils.dart';
@@ -21,15 +22,25 @@ class _GomokuGameScreenState extends State<GomokuGameScreen> {
   int _turn = 1;
   bool _gameOver = false;
   bool _abandoned = false;
+  bool _resultShown = false;
   StreamSubscription? _sub;
   StreamSubscription? _statusSub;
+  StreamSubscription? _presenceSub;
+  Timer? _oppGoneTimer;
+  Timer? _idleTimer;
+  bool _oppSeen = false;
   late int _myNum;
   static const int N = 11;
+  final String _myUid = FirebaseAuth.instance.currentUser!.uid;
+
+  bool get _vsAi => widget.args.vsAi;
 
   @override
   void initState() {
     super.initState();
     _myNum = widget.args.isP1 ? 1 : 2;
+    if (_vsAi) return; // local vs-Computer practice
+    // State listener: board + turn only.
     _sub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
         .child('state')
         .onValue
@@ -39,26 +50,72 @@ class _GomokuGameScreenState extends State<GomokuGameScreen> {
       final board = List<int>.from((st['board'] as List).map((e) => int.parse(e.toString())));
       final turn  = int.parse(st['turn'].toString());
       setState(() { _board = board; _turn = turn; });
-      // Always check for opponent win after any board update.
-      // The previous condition (prevTurn != _myNum && turn == _myNum) was wrong:
-      // when the opponent wins, 'turn' stays at their number, so the condition
-      // was never true and the win was never detected on the loser's device.
-      if (!_gameOver) {
-        _scanOpponentWin(board);
-      }
+      _resetIdleTimer();
     });
+    // Result driven by atomic status+winner field (single source of truth).
     _statusSub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
-        .child('status').onValue.listen((ev) {
-      if (!mounted || _gameOver) return;
-      if (ev.snapshot.value?.toString() == 'finished') {
-        setState(() => _gameOver = true);
-        showOpponentLeftDialog(context);
+        .onValue.listen((ev) {
+      if (!mounted || ev.snapshot.value == null) return;
+      final data = Map<String, dynamic>.from(ev.snapshot.value as Map);
+      final status = data['status']?.toString();
+      if (status == 'finished' || status == 'cancelled') {
+        _finish(data['winner']?.toString());
+        return;
       }
+      _watchOpponent(data);
+    });
+    _presenceSub = ArcadeService.keepPresence(widget.args.type, widget.args.gameId);
+  }
+
+  // Arms only after the opponent has been seen present — see connect4 for notes.
+  void _watchOpponent(Map<String, dynamic> data) {
+    final presence = data['presence'];
+    final oppHere  = presence is Map && presence[widget.args.oppId] == true;
+    if (oppHere) _oppSeen = true;
+    if (_oppSeen && !oppHere && !_gameOver) {
+      _oppGoneTimer ??= Timer(const Duration(seconds: 8), () {
+        if (_gameOver || !mounted) return;
+        ArcadeService.endGame(widget.args.type, widget.args.gameId, _myUid, widget.args.entryFee);
+        _finish(_myUid);
+      });
+    } else {
+      _oppGoneTimer?.cancel();
+      _oppGoneTimer = null;
+    }
+  }
+
+  void _finish(String? winner) {
+    if (_gameOver || _resultShown || !mounted) return;
+    setState(() => _gameOver = true);
+    final won  = winner != null && winner.isNotEmpty && winner == _myUid;
+    final draw = winner == null || winner.isEmpty || winner == 'draw';
+    _showResult(won, draw);
+  }
+
+  // "Time over" watchdog: opponent forfeits if idle on their turn past the limit.
+  void _resetIdleTimer() {
+    _idleTimer?.cancel();
+    if (_gameOver || _myTurn) return;
+    _idleTimer = Timer(const Duration(seconds: 45), () {
+      if (_gameOver || _myTurn || !mounted) return;
+      ArcadeService.endGame(widget.args.type, widget.args.gameId, _myUid, widget.args.entryFee);
+      _finish(_myUid);
     });
   }
 
   @override
-  void dispose() { _sub?.cancel(); _statusSub?.cancel(); super.dispose(); }
+  void dispose() {
+    _idleTimer?.cancel();
+    _sub?.cancel();
+    _statusSub?.cancel();
+    _presenceSub?.cancel();
+    _oppGoneTimer?.cancel();
+    if (!_vsAi) {
+      ArcadeService.goOffline(widget.args.type, widget.args.gameId);
+      if (_resultShown) ArcadeService.cleanup(widget.args.type, widget.args.gameId);
+    }
+    super.dispose();
+  }
 
   void _abandonGame() async {
     if (_abandoned) return;
@@ -66,7 +123,9 @@ class _GomokuGameScreenState extends State<GomokuGameScreen> {
     setState(() => _gameOver = true);
     _sub?.cancel();
     _statusSub?.cancel();
-    await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
+    if (!_vsAi) {
+      await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
+    }
     if (mounted) {
       Navigator.of(context).popUntil((route) => route is PageRoute);
       Navigator.of(context).pop();
@@ -85,20 +144,6 @@ class _GomokuGameScreenState extends State<GomokuGameScreen> {
 
   bool get _myTurn => _turn == _myNum && !_gameOver;
 
-  void _scanOpponentWin(List<int> board) {
-    final oppNum = _myNum == 1 ? 2 : 1;
-    for (int i = 0; i < N * N; i++) {
-      if (board[i] == oppNum) {
-        final row = i ~/ N, col = i % N;
-        if (_checkWin(board, row, col, oppNum)) {
-          setState(() => _gameOver = true);
-          _showResult(false, false);
-          return;
-        }
-      }
-    }
-  }
-
   void _place(int idx) async {
     if (!_myTurn || _board[idx] != 0) return;
     final newBoard = List<int>.from(_board);
@@ -111,19 +156,48 @@ class _GomokuGameScreenState extends State<GomokuGameScreen> {
     final draw = !newBoard.contains(0);
     final next = _turn == 1 ? 2 : 1;
 
+    if (_vsAi) {
+      setState(() { _board = newBoard; _turn = won || draw ? _turn : next; });
+      if (won) {
+        _finish(_myUid);
+      } else if (draw) {
+        _finish('draw');
+      } else {
+        _scheduleAiMove();
+      }
+      return;
+    }
+
     await ArcadeService.updateState(widget.args.type, widget.args.gameId,
         {'board': newBoard, 'turn': won || draw ? _turn : next});
 
     if (won) {
-      setState(() => _gameOver = true);
       await ArcadeService.endGame(widget.args.type, widget.args.gameId,
-          FirebaseAuth.instance.currentUser!.uid, widget.args.entryFee);
-      if (mounted) _showResult(true, false);
+          _myUid, widget.args.entryFee);
+      _finish(_myUid);
     } else if (draw) {
-      setState(() => _gameOver = true);
-      await ArcadeService.endGame(widget.args.type, widget.args.gameId, null, widget.args.entryFee);
-      if (mounted) _showResult(false, true);
+      await ArcadeService.endGame(widget.args.type, widget.args.gameId, 'draw', widget.args.entryFee);
+      _finish('draw');
     }
+  }
+
+  // Bot plays as P2 (value 2).
+  void _scheduleAiMove() {
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted || _gameOver) return;
+      final idx = GomokuAi.bestMove(_board, N, 2, 1, widget.args.aiLevel);
+      if (idx < 0 || _board[idx] != 0) return;
+      final nb = List<int>.from(_board)..[idx] = 2;
+      music.play(dice);
+      final win  = _checkWin(nb, idx ~/ N, idx % N, 2);
+      final draw = !nb.contains(0);
+      setState(() { _board = nb; _turn = win || draw ? _turn : 1; });
+      if (win) {
+        _finish(widget.args.oppId);
+      } else if (draw) {
+        _finish('draw');
+      }
+    });
   }
 
   bool _checkWin(List<int> b, int row, int col, int player) {
@@ -142,11 +216,13 @@ class _GomokuGameScreenState extends State<GomokuGameScreen> {
   }
 
   void _showResult(bool won, bool draw) {
+    if (_resultShown) return;
+    _resultShown = true;
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
       backgroundColor: surfaceColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
       title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      content: Text(won ? '+${widget.args.entryFee * 2} coins!' : draw ? 'No winner' : 'Better luck next time', style: TextStyle(color: xColor), textAlign: TextAlign.center),
+      content: Text(_vsAi ? (won ? 'You beat the Computer!' : draw ? 'No winner' : 'The Computer won') : (won ? '+${widget.args.entryFee * 2} coins!' : draw ? 'No winner' : 'Better luck next time'), style: TextStyle(color: xColor), textAlign: TextAlign.center),
       actions: [TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: Text('Back', style: TextStyle(color: xColor)))],
     ));
   }

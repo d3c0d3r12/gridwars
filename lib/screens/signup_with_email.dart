@@ -91,7 +91,7 @@ class _SigninWithEmailState extends State<SignInWithEmail>
                                 color: inkColor),
                           ),
                           const SizedBox(height: 6),
-                          Text('Create your Chilling Zone account',
+                          Text('Create your Chill Zone account',
                               style: TextStyle(
                                   fontSize: 14, color: ink2Color)),
                           const SizedBox(height: 32),

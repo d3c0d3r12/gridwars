@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../functions/arcade_service.dart';
+import '../../functions/arcade_ai.dart';
 import '../../helpers/color.dart';
 import '../../helpers/constant.dart';
 import '../../helpers/utils.dart';
@@ -21,15 +22,32 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
   bool _gameOver = false;
   bool _abandoned = false;
   bool _disposed = false;
+  bool _resultShown = false;
   StreamSubscription? _sub;
   StreamSubscription? _statusSub;
+  StreamSubscription? _presenceSub;
+  Timer? _oppGoneTimer;
+  Timer? _idleTimer;
+  bool _oppSeen = false;
   late int _myNum;
   List<int> _validMoves = [];
+  final String _myUid = FirebaseAuth.instance.currentUser!.uid;
+
+  bool get _vsAi => widget.args.vsAi;
 
   @override
   void initState() {
     super.initState();
     _myNum = widget.args.isP1 ? 1 : 2;
+    if (_vsAi) {
+      // Local vs-Computer: seed the starting layout (unlike empty-board games,
+      // checkers needs its pieces placed). Human is P1 and moves first.
+      final init = ArcadeService.initialState('checkers');
+      _board = List<int>.from((init['board'] as List).map((e) => int.parse(e.toString())));
+      _turn = 1;
+      _selected = -1;
+      return;
+    }
     _sub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
         .child('state')
         .onValue
@@ -41,22 +59,77 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
       final selected = int.parse(st['selected'].toString());
       setState(() { _board = board; _turn = turn; _selected = selected; _validMoves = []; });
       if (!_gameOver) _checkGameOver(board, turn);
+      _resetIdleTimer();
     });
+    // Result driven by atomic status+winner field (single source of truth).
     _statusSub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
-        .child('status').onValue.listen((ev) {
-      if (_disposed || !mounted || _gameOver) return;
-      if (ev.snapshot.value?.toString() == 'finished') {
-        setState(() => _gameOver = true);
-        showOpponentLeftDialog(context);
+        .onValue.listen((ev) {
+      if (_disposed || !mounted || ev.snapshot.value == null) return;
+      final data = Map<String, dynamic>.from(ev.snapshot.value as Map);
+      final status = data['status']?.toString();
+      if (status == 'finished' || status == 'cancelled') {
+        _finish(data['winner']?.toString());
+        return;
       }
+      _watchOpponent(data);
+    });
+    _presenceSub = ArcadeService.keepPresence(widget.args.type, widget.args.gameId);
+  }
+
+  // Arms only after the opponent has been seen present — see connect4 for notes.
+  void _watchOpponent(Map<String, dynamic> data) {
+    final presence = data['presence'];
+    final oppHere  = presence is Map && presence[widget.args.oppId] == true;
+    if (oppHere) _oppSeen = true;
+    if (_oppSeen && !oppHere && !_gameOver) {
+      _oppGoneTimer ??= Timer(const Duration(seconds: 8), () {
+        if (_gameOver || _disposed || !mounted) return;
+        ArcadeService.endGame(widget.args.type, widget.args.gameId, _myUid, widget.args.entryFee);
+        _finish(_myUid);
+      });
+    } else {
+      _oppGoneTimer?.cancel();
+      _oppGoneTimer = null;
+    }
+  }
+
+  // Unified, idempotent game-over driven by the winner uid.
+  void _finish(String? winner) {
+    if (_gameOver || _resultShown || _disposed || !mounted) return;
+    setState(() => _gameOver = true);
+    _showResult(winner != null && winner.isNotEmpty && winner == _myUid);
+  }
+
+  void _endWith(String winner) {
+    // vs-AI is free practice — no Firebase write, no coins/stats.
+    if (!_vsAi) {
+      ArcadeService.endGame(widget.args.type, widget.args.gameId, winner, widget.args.entryFee);
+    }
+    _finish(winner);
+  }
+
+  // "Time over" watchdog: opponent forfeits if idle on their turn past the limit.
+  void _resetIdleTimer() {
+    _idleTimer?.cancel();
+    if (_gameOver || _disposed || _myTurn) return;
+    _idleTimer = Timer(const Duration(seconds: 45), () {
+      if (_gameOver || _disposed || _myTurn || !mounted) return;
+      _endWith(_myUid);
     });
   }
 
   @override
   void dispose() {
     _disposed = true;
+    _idleTimer?.cancel();
     _sub?.cancel();
     _statusSub?.cancel();
+    _presenceSub?.cancel();
+    _oppGoneTimer?.cancel();
+    if (!_vsAi) {
+      ArcadeService.goOffline(widget.args.type, widget.args.gameId);
+      if (_resultShown) ArcadeService.cleanup(widget.args.type, widget.args.gameId);
+    }
     super.dispose();
   }
 
@@ -66,7 +139,9 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
     setState(() => _gameOver = true);
     _sub?.cancel();
     _statusSub?.cancel();
-    await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
+    if (!_vsAi) {
+      await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
+    }
     if (mounted && !_disposed) {
       Navigator.of(context).popUntil((route) => route is PageRoute);
       Navigator.of(context).pop();
@@ -95,23 +170,11 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
     final oppKingNum  = _myNum == 1 ? 4 : 3;
     final oppPieces   = board.where((c) => c == oppNum || c == oppKingNum).length;
 
-    // If I have no pieces, I lose
-    if (myPieces == 0) {
-      _gameOver = true;
-      _showResult(false);
-      ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
-      return;
-    }
+    // If I have no pieces, I lose. If opponent has none, I win.
+    if (myPieces == 0) { _endWith(widget.args.oppId); return; }
+    if (oppPieces == 0) { _endWith(_myUid); return; }
 
-    // If opponent has no pieces, I win
-    if (oppPieces == 0) {
-      _gameOver = true;
-      _showResult(true);
-      ArcadeService.endGame(widget.args.type, widget.args.gameId, FirebaseAuth.instance.currentUser!.uid, widget.args.entryFee);
-      return;
-    }
-
-    // Check if current player has any valid moves
+    // Check if the current player has any valid moves.
     bool hasMoves = false;
     for (int i = 0; i < 64; i++) {
       final piece = board[i];
@@ -123,16 +186,8 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
     }
 
     if (!hasMoves) {
-      // No moves available - current player loses
-      if (_turn == _myNum) {
-        _gameOver = true;
-        _showResult(false);
-        ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
-      } else {
-        _gameOver = true;
-        _showResult(true);
-        ArcadeService.endGame(widget.args.type, widget.args.gameId, FirebaseAuth.instance.currentUser!.uid, widget.args.entryFee);
-      }
+      // Current player (whose turn it is) can't move → they lose.
+      _endWith(_turn == _myNum ? widget.args.oppId : _myUid);
     }
   }
 
@@ -209,8 +264,16 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
     final chainJumps = _getMoves(to, newBoard).where((m) => (m ~/ 8 - toR).abs() == 2).toList();
     if (chainJumps.isNotEmpty && (fromR - toR).abs() == 2) {
       setState(() { _board = newBoard; _selected = to; _validMoves = chainJumps; });
+      if (_vsAi) return; // same player continues the chain locally
       await ArcadeService.updateState(widget.args.type, widget.args.gameId,
           {'board': newBoard, 'turn': _turn, 'selected': to});
+      return;
+    }
+
+    if (_vsAi) {
+      setState(() { _board = newBoard; _turn = next; _selected = -1; _validMoves = []; });
+      _checkGameOver(newBoard, next);
+      if (!_gameOver && _turn != _myNum) _scheduleAiMove();
       return;
     }
 
@@ -221,12 +284,27 @@ class _CheckersGameScreenState extends State<CheckersGameScreen> {
     _checkGameOver(newBoard, next);
   }
 
+  // Bot plays as P2 (values 2/4). Applies its full move (incl. chained jumps).
+  void _scheduleAiMove() {
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (!mounted || _gameOver || _disposed || _turn != 2) return;
+      final m = CheckersAi.bestMove(_board, 2, widget.args.aiLevel);
+      if (m == null) { _endWith(_myUid); return; } // bot stuck → human wins
+      final nb = CheckersAi.apply(_board, m);
+      music.play(dice);
+      setState(() { _board = nb; _turn = 1; _selected = -1; _validMoves = []; });
+      _checkGameOver(nb, 1);
+    });
+  }
+
   void _showResult(bool won) {
+    if (_resultShown) return;
+    _resultShown = true;
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
       backgroundColor: surfaceColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
       title: Text(won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      content: Text(won ? '+${widget.args.entryFee * 2} coins!' : 'Better luck next time', style: TextStyle(color: xColor), textAlign: TextAlign.center),
+      content: Text(_vsAi ? (won ? 'You beat the Computer!' : 'The Computer won') : (won ? '+${widget.args.entryFee * 2} coins!' : 'Better luck next time'), style: TextStyle(color: xColor), textAlign: TextAlign.center),
       actions: [TextButton(onPressed: () {
         if (Navigator.canPop(context)) Navigator.pop(context);
         if (Navigator.canPop(context)) Navigator.pop(context);

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../functions/arcade_service.dart';
+import '../../functions/arcade_ai.dart';
 import '../../helpers/color.dart';
 import '../../helpers/constant.dart';
 import '../../helpers/utils.dart';
@@ -21,14 +22,26 @@ class _Connect4GameScreenState extends State<Connect4GameScreen> {
   int _turn = 1;
   bool _gameOver = false;
   bool _abandoned = false;
+  bool _resultShown = false;
   StreamSubscription? _sub;
   StreamSubscription? _statusSub;
+  StreamSubscription? _presenceSub;
+  Timer? _oppGoneTimer;
+  Timer? _idleTimer;
+  bool _oppSeen = false;
   int _myNum = 0;
+  final String _myUid = FirebaseAuth.instance.currentUser!.uid;
+
+  bool get _vsAi => widget.args.vsAi;
 
   @override
   void initState() {
     super.initState();
     _myNum = widget.args.isP1 ? 1 : 2;
+    // Local vs-Computer practice: no Firebase, human is P1 and moves first.
+    if (_vsAi) return;
+    // State listener: board + turn only. Result is driven by the status/winner
+    // field below (single source of truth — no fragile board re-detection).
     _sub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
         .child('state')
         .onValue
@@ -38,41 +51,81 @@ class _Connect4GameScreenState extends State<Connect4GameScreen> {
       final board = List<int>.from((st['board'] as List).map((e) => int.parse(e.toString())));
       final turn  = int.parse(st['turn'].toString());
       setState(() { _board = board; _turn = turn; });
-
-      // Detect opponent win/draw on the loser's side so we show the correct
-      // result ("You Lose") instead of the generic "Opponent Left" fallback.
-      if (!_gameOver) {
-        final oppNum = _myNum == 1 ? 2 : 1;
-        outer:
-        for (int r = 5; r >= 0; r--) {
-          for (int c = 0; c < 7; c++) {
-            if (board[r * 7 + c] == oppNum && _checkWin(board, r, c, oppNum)) {
-              setState(() => _gameOver = true);
-              _showResult(false, false);
-              break outer;
-            }
-          }
-        }
-        if (!_gameOver && !board.contains(0)) {
-          setState(() => _gameOver = true);
-          _showResult(false, true);
-        }
-      }
+      _resetIdleTimer();
     });
-    // _statusSub is a true-disconnect fallback only: fires when status='finished'
-    // but local win/draw detection above hasn't already set _gameOver.
+    // Whole-node listener: when the game finishes, winner is in the same
+    // snapshot (endGame writes status+winner atomically) → show correct result.
     _statusSub = ArcadeService.stateRef(widget.args.type, widget.args.gameId)
-        .child('status').onValue.listen((ev) {
-      if (!mounted || _gameOver) return;
-      if (ev.snapshot.value?.toString() == 'finished') {
-        setState(() => _gameOver = true);
-        showOpponentLeftDialog(context);
+        .onValue.listen((ev) {
+      if (!mounted || ev.snapshot.value == null) return;
+      final data = Map<String, dynamic>.from(ev.snapshot.value as Map);
+      final status = data['status']?.toString();
+      if (status == 'finished' || status == 'cancelled') {
+        _finish(data['winner']?.toString());
+        return;
       }
+      _watchOpponent(data);
+    });
+    // Mark myself present; auto-cleared by the server if I disconnect.
+    _presenceSub = ArcadeService.keepPresence(widget.args.type, widget.args.gameId);
+  }
+
+  // Opponent-disconnect watchdog. Only arms AFTER we've actually seen the
+  // opponent present at least once — so if presence ever fails to write, the
+  // watchdog stays dormant and the game behaves exactly as before (no false win).
+  void _watchOpponent(Map<String, dynamic> data) {
+    final presence = data['presence'];
+    final oppHere  = presence is Map && presence[widget.args.oppId] == true;
+    if (oppHere) _oppSeen = true;
+    if (_oppSeen && !oppHere && !_gameOver) {
+      _oppGoneTimer ??= Timer(const Duration(seconds: 8), () {
+        if (_gameOver || !mounted) return;
+        ArcadeService.endGame(widget.args.type, widget.args.gameId, _myUid, widget.args.entryFee);
+        _finish(_myUid);
+      });
+    } else {
+      _oppGoneTimer?.cancel();
+      _oppGoneTimer = null;
+    }
+  }
+
+  // Unified, idempotent game-over. Result derived from the winner uid.
+  void _finish(String? winner) {
+    if (_gameOver || _resultShown || !mounted) return;
+    setState(() => _gameOver = true);
+    final won  = winner != null && winner.isNotEmpty && winner == _myUid;
+    final draw = winner == null || winner.isEmpty || winner == 'draw';
+    _showResult(won, draw);
+  }
+
+  // "Time over" watchdog: if it's the opponent's turn and they sit idle (but
+  // stay connected) past the limit, they forfeit. Only ever arms while waiting
+  // on the opponent, so a legit slow player on their own turn is never punished.
+  void _resetIdleTimer() {
+    _idleTimer?.cancel();
+    if (_gameOver || _myTurn) return;
+    _idleTimer = Timer(const Duration(seconds: 45), () {
+      if (_gameOver || _myTurn || !mounted) return;
+      ArcadeService.endGame(widget.args.type, widget.args.gameId, _myUid, widget.args.entryFee);
+      _finish(_myUid);
     });
   }
 
   @override
-  void dispose() { _sub?.cancel(); _statusSub?.cancel(); super.dispose(); }
+  void dispose() {
+    _idleTimer?.cancel();
+    _sub?.cancel();
+    _statusSub?.cancel();
+    _presenceSub?.cancel();
+    _oppGoneTimer?.cancel();
+    if (!_vsAi) {
+      ArcadeService.goOffline(widget.args.type, widget.args.gameId);
+      // Only the player who actually saw a result cleans up the node — never the
+      // one who abandoned, so the opponent is guaranteed to read the finish first.
+      if (_resultShown) ArcadeService.cleanup(widget.args.type, widget.args.gameId);
+    }
+    super.dispose();
+  }
 
   void _abandonGame() async {
     if (_abandoned) return;
@@ -80,7 +133,10 @@ class _Connect4GameScreenState extends State<Connect4GameScreen> {
     setState(() => _gameOver = true);
     _sub?.cancel();
     _statusSub?.cancel();
-    await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
+    // vs-AI is free practice — just leave, no forfeit/coins.
+    if (!_vsAi) {
+      await ArcadeService.endGame(widget.args.type, widget.args.gameId, widget.args.oppId, widget.args.entryFee);
+    }
     if (mounted) {
       Navigator.of(context).popUntil((route) => route is PageRoute);
       Navigator.of(context).pop();
@@ -116,19 +172,51 @@ class _Connect4GameScreenState extends State<Connect4GameScreen> {
     final draw   = !newBoard.contains(0);
     final nextTurn = _turn == 1 ? 2 : 1;
 
+    if (_vsAi) {
+      setState(() { _board = newBoard; _turn = winner || draw ? _turn : nextTurn; });
+      if (winner) {
+        _finish(_myUid);
+      } else if (draw) {
+        _finish('draw');
+      } else {
+        _scheduleAiMove();
+      }
+      return;
+    }
+
     await ArcadeService.updateState(widget.args.type, widget.args.gameId,
         {'board': newBoard, 'turn': winner || draw ? _turn : nextTurn});
 
     if (winner) {
-      setState(() => _gameOver = true);
       await ArcadeService.endGame(widget.args.type, widget.args.gameId,
-          FirebaseAuth.instance.currentUser!.uid, widget.args.entryFee);
-      if (mounted) _showResult(true, false);
+          _myUid, widget.args.entryFee);
+      _finish(_myUid);
     } else if (draw) {
-      setState(() => _gameOver = true);
-      await ArcadeService.endGame(widget.args.type, widget.args.gameId, null, widget.args.entryFee);
-      if (mounted) _showResult(false, true);
+      await ArcadeService.endGame(widget.args.type, widget.args.gameId, 'draw', widget.args.entryFee);
+      _finish('draw');
     }
+  }
+
+  // Bot plays as P2 (value 2). Small delay so the move feels natural.
+  void _scheduleAiMove() {
+    Future.delayed(const Duration(milliseconds: 550), () {
+      if (!mounted || _gameOver) return;
+      final col = Connect4Ai.bestMove(_board, 2, 1, widget.args.aiLevel);
+      if (col < 0) return;
+      int row = -1;
+      for (int r = 5; r >= 0; r--) { if (_board[r * 7 + col] == 0) { row = r; break; } }
+      if (row < 0) return;
+      final nb = List<int>.from(_board)..[row * 7 + col] = 2;
+      music.play(dice);
+      final win  = _checkWin(nb, row, col, 2);
+      final draw = !nb.contains(0);
+      setState(() { _board = nb; _turn = win || draw ? _turn : 1; });
+      if (win) {
+        _finish(widget.args.oppId);
+      } else if (draw) {
+        _finish('draw');
+      }
+    });
   }
 
   bool _checkWin(List<int> b, int row, int col, int player) {
@@ -148,11 +236,13 @@ class _Connect4GameScreenState extends State<Connect4GameScreen> {
   }
 
   void _showResult(bool won, bool draw) {
+    if (_resultShown) return;
+    _resultShown = true;
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(
       backgroundColor: surfaceColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: xColor.withValues(alpha: 0.4))),
       title: Text(draw ? '🤝 Draw!' : won ? '🏆 You Win!' : '😔 You Lose', style: TextStyle(color: inkColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      content: Text(won ? '+${widget.args.entryFee * 2} coins!' : draw ? 'No winner' : 'Better luck next time', style: TextStyle(color: xColor), textAlign: TextAlign.center),
+      content: Text(_vsAi ? (won ? 'You beat the Computer!' : draw ? 'No winner' : 'The Computer won') : (won ? '+${widget.args.entryFee * 2} coins!' : draw ? 'No winner' : 'Better luck next time'), style: TextStyle(color: xColor), textAlign: TextAlign.center),
       actions: [TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: Text('Back', style: TextStyle(color: xColor)))],
     ));
   }

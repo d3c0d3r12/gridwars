@@ -200,23 +200,23 @@ export default {
         }
       );
 
-      if (!fcmRes.ok) {
-        // Parse the structured error; only a genuine UNREGISTERED means the
-        // token is dead. Never delete based on a substring of the raw text.
-        let errCode = "";
-        try {
-          const ej = await fcmRes.json();
-          const det =
-            ej.error && ej.error.details
-              ? ej.error.details.find((d) => d.errorCode)
-              : null;
-          errCode = (det && det.errorCode) || (ej.error && ej.error.status) || "";
-        } catch (_) {}
-        if (errCode === "UNREGISTERED") {
-          await dbDelete(`fcmTokens/${toUid}`, accessToken);
+        if (!fcmRes.ok) {
+          // Parse the structured error; only a genuine UNREGISTERED means the
+          // token is dead. Never delete based on a substring of the raw text.
+          let errCode = "";
+          try {
+            const ej = await fcmRes.json();
+            const det =
+              ej.error && ej.error.details
+                ? ej.error.details.find((d) => d.errorCode)
+                : null;
+            errCode = (det && det.errorCode) || (ej.error && ej.error.status) || "";
+          } catch (_) {}
+          if (errCode === "UNREGISTERED") {
+            await dbDelete(`fcmTokens/${toUid}`, accessToken);
+          }
+          return new Response("fcm error: " + errCode, { status: 200 });
         }
-        return new Response("fcm error: " + errCode, { status: 200 });
-      }
       return new Response("sent", { status: 200 });
     } catch (e) {
       return new Response("error: " + (e && e.message), { status: 200 });

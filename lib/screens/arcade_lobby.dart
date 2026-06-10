@@ -99,6 +99,10 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
       _sub?.cancel();
       _lobbySub?.cancel();
 
+      // Opponent joined — cancel the "remove whole node on disconnect" hook so a
+      // mid-game disconnect becomes an opponent win, not a deleted game.
+      ArcadeService.clearWaitingDisconnect(widget.gameType, gameId);
+
       // Fire-and-forget coin deduction
       FirebaseDatabase.instance.ref()
           .child('users').child(_uid).child('coin')
@@ -155,17 +159,24 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
 
   void _navigate(String gameId, {required bool isP1, required String oppId, required String oppName}) {
     if (_disposed) return;
-    Widget screen;
     final args = _GameArgs(gameId: gameId, type: widget.gameType, isP1: isP1, oppId: oppId, oppName: oppName, entryFee: fixedEntryFee);
-    switch (widget.gameType) {
-      case 'rps':        screen = RpsGameScreen(args: args); break;
-      case 'connect4':   screen = Connect4GameScreen(args: args); break;
-      case 'gomoku':     screen = GomokuGameScreen(args: args); break;
-      case 'dotsboxes':  screen = DotsBoxesGameScreen(args: args); break;
-      case 'checkers':   screen = CheckersGameScreen(args: args); break;
-      case 'battleship': screen = BattleshipGameScreen(args: args); break;
-      default: return;
+    final screen = buildArcadeGameScreen(args);
+    if (screen == null) return;
+    Navigator.pushReplacement(context, CupertinoPageRoute(builder: (_) => screen));
+  }
+
+  // No opponent found → drop into a free local vs-Computer match (Medium).
+  void _playWithAi() {
+    if (_disposed) return;
+    _sub?.cancel();
+    _lobbySub?.cancel();
+    _timeout?.cancel();
+    _navDelay?.cancel();
+    if (_gameId.isNotEmpty) {
+      ArcadeService.cancelGame(widget.gameType, _gameId);
     }
+    final screen = buildArcadeGameScreen(_GameArgs.ai(widget.gameType, 1));
+    if (screen == null) return;
     Navigator.pushReplacement(context, CupertinoPageRoute(builder: (_) => screen));
   }
 
@@ -289,7 +300,7 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
 
             const SizedBox(height: 32),
 
-            if (!_searching && !_foundOpp)
+            if (!_searching && !_foundOpp) ...[
               GestureDetector(
                 onTap: _retry,
                 child: Container(
@@ -302,6 +313,31 @@ class _ArcadeLobbyScreenState extends State<ArcadeLobbyScreen> {
                   child: const Text('Try Again', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
                 ),
               ),
+              const SizedBox(height: 14),
+              // No opponent online — let the player jump straight into a free
+              // vs-Computer match instead of waiting around.
+              GestureDetector(
+                onTap: _playWithAi,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 13),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: surfaceColor,
+                    border: Border.all(color: widget.accent.withValues(alpha: 0.45)),
+                    boxShadow: [shadowSm],
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.smart_toy_rounded, color: widget.accent, size: 19),
+                    const SizedBox(width: 9),
+                    Text('Play with AI',
+                        style: TextStyle(color: widget.accent, fontWeight: FontWeight.w800, fontSize: 14.5)),
+                  ]),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text('Free practice — no coins',
+                  style: TextStyle(color: ink3Color, fontSize: 11.5)),
+            ],
           ])),
         ]),
       ),
@@ -313,7 +349,54 @@ class _GameArgs {
   final String gameId, type, oppId, oppName;
   final bool isP1;
   final int entryFee;
-  const _GameArgs({required this.gameId, required this.type, required this.isP1, required this.oppId, required this.oppName, required this.entryFee});
+  // vs-AI (free practice) mode. When true the game runs fully locally against a
+  // bot — no Firebase, no coins. aiLevel: 0=Easy, 1=Medium, 2=Hard.
+  final bool vsAi;
+  final int aiLevel;
+  const _GameArgs({
+    required this.gameId,
+    required this.type,
+    required this.isP1,
+    required this.oppId,
+    required this.oppName,
+    required this.entryFee,
+    this.vsAi = false,
+    this.aiLevel = 1,
+  });
+
+  /// Build args for a local vs-AI match. Human is always P1; bot is "opponent".
+  factory _GameArgs.ai(String type, int level) => _GameArgs(
+        gameId: 'local',
+        type: type,
+        isP1: true,
+        oppId: '_ai_',
+        oppName: 'Computer',
+        entryFee: 0,
+        vsAi: true,
+        aiLevel: level,
+      );
 }
 
 typedef GameArgs = _GameArgs;
+
+/// Build the screen widget for a given arcade game type. Shared by online
+/// matchmaking (`_navigate`) and the local vs-AI launcher so both routes go
+/// through identical screen construction.
+Widget? buildArcadeGameScreen(GameArgs args) {
+  switch (args.type) {
+    case 'rps':        return RpsGameScreen(args: args);
+    case 'connect4':   return Connect4GameScreen(args: args);
+    case 'gomoku':     return GomokuGameScreen(args: args);
+    case 'dotsboxes':  return DotsBoxesGameScreen(args: args);
+    case 'checkers':   return CheckersGameScreen(args: args);
+    case 'battleship': return BattleshipGameScreen(args: args);
+    default:           return null;
+  }
+}
+
+/// Launch a free, local vs-Computer match of [type] at [level] (0/1/2).
+void launchVsAi(BuildContext context, String type, int level) {
+  final screen = buildArcadeGameScreen(GameArgs.ai(type, level));
+  if (screen == null) return;
+  Navigator.push(context, CupertinoPageRoute(builder: (_) => screen));
+}
